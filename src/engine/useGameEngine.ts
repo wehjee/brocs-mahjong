@@ -42,7 +42,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function createInitialState(humanName: string): GameState {
+function createInitialState(humanName: string, dealerIndex = 0): GameState {
   _tileId = 0;
   const defs = shuffle(generateTileSet());
 
@@ -53,8 +53,8 @@ function createInitialState(humanName: string): GameState {
       hands[p].push(makeTile(defs[idx++], true));
     }
   }
-  // East draws 14th
-  hands[0].push(makeTile(defs[idx++], true));
+  // Dealer (East) draws 14th tile
+  hands[dealerIndex].push(makeTile(defs[idx++], true));
 
   const wall: Tile[] = [];
   while (idx < defs.length) wall.push(makeTile(defs[idx++]));
@@ -99,13 +99,13 @@ function createInitialState(humanName: string): GameState {
       discards: [],
       melds: [],
       revealedBonuses: bonuses[i],
-      isCurrentTurn: i === 0,
+      isCurrentTurn: i === dealerIndex,
       score: 0,
       isReady: true,
       isConnected: true,
     })),
     wall,
-    currentPlayerIndex: 0,
+    currentPlayerIndex: dealerIndex,
     roundWind: 'east',
     roundNumber: 1,
     turnNumber: 1,
@@ -672,27 +672,24 @@ export function useGameEngine(humanName: string): GameEngine {
       }
     }
 
-    // Create fresh game state
-    const newGs = createInitialState(prevGs.players[0].name);
-
     // Rotate seat winds: each player shifts one position
     const seatRotation: SeatWind[] = ['east', 'south', 'west', 'north'];
-
-    // Preserve scores and rotate seats
-    const updatedPlayers = newGs.players.map((p, i) => {
-      const prevSeatIdx = seatRotation.indexOf(prevGs.players[i].seatWind);
-      const newSeatIdx = (prevSeatIdx + 1) % 4;
-      return {
-        ...p,
-        score: prevScores[i],
-        seatWind: seatRotation[newSeatIdx],
-      };
+    const newSeatWinds = prevGs.players.map((p) => {
+      const prevSeatIdx = seatRotation.indexOf(p.seatWind);
+      return seatRotation[(prevSeatIdx + 1) % 4];
     });
 
-    // Find who is now East (dealer) — they start
-    const eastIdx = updatedPlayers.findIndex(p => p.seatWind === 'east');
-    const finalPlayers = updatedPlayers.map((p, i) => ({
+    // Find who will be East (dealer) — they get 14 tiles and start
+    const eastIdx = newSeatWinds.indexOf('east');
+
+    // Create fresh game state with correct dealer
+    const newGs = createInitialState(prevGs.players[0].name, eastIdx);
+
+    // Apply rotated seat winds and preserved scores
+    const finalPlayers = newGs.players.map((p, i) => ({
       ...p,
+      score: prevScores[i],
+      seatWind: newSeatWinds[i],
       isCurrentTurn: i === eastIdx,
     }));
 
@@ -717,8 +714,7 @@ export function useGameEngine(humanName: string): GameEngine {
     } else {
       // AI is East — human waits for their turn
       setTurnPhase('ai-thinking');
-      // Need to schedule AI turns starting from East
-      // But East already has 14 tiles, so they start with discard
+      // East already has 14 tiles, so they start with discard
       timerRef.current = setTimeout(() => {
         runAiDiscard(finalGs, eastIdx);
       }, AI_DELAY);
