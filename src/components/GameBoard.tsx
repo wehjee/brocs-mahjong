@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
+import { checkWin } from '../engine/gameEngine';
 import PlayerHand from './PlayerHand';
 import DiscardPool from './DiscardPool';
 import PlayerInfo from './PlayerInfo';
@@ -85,20 +86,25 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
     performAction(action);
   };
 
-  // Available actions based on phase
+  // Only show buttons when the action is actually available
+  const canWin = checkWin(me.hand, me.melds) && me.hand.length === 14 - me.melds.length * 3;
+
   const availableActions: ActionType[] = (() => {
     switch (turnPhase) {
       case 'human-needs-draw':
-        return ['draw'];
+        return ['draw' as ActionType];
       case 'human-needs-discard': {
         const actions: ActionType[] = [];
         if (selectedTileId) actions.push('discard');
-        const { hand, melds } = me;
-        if (hand.length === 14 - melds.length * 3) actions.push('win');
+        if (canWin) actions.push('win');
         return actions;
       }
-      case 'claim-window':
-        return ['pong', 'win', 'pass'];
+      case 'claim-window': {
+        const actions: ActionType[] = ['pong'];
+        if (canWin) actions.push('win');
+        actions.push('pass');
+        return actions;
+      }
       default:
         return [];
     }
@@ -280,7 +286,7 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
                 {phaseLabel}
               </span>
               <ActionBar
-                availableActions={availableActions}
+                actions={availableActions}
                 onAction={handleAction}
                 tilesRemaining={gameState.tilesRemaining}
               />

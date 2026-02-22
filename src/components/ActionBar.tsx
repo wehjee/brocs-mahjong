@@ -2,10 +2,9 @@ import { motion } from 'framer-motion';
 import type { ActionType } from '../types/game';
 
 interface ActionBarProps {
-  availableActions: ActionType[];
+  actions: ActionType[];
   onAction: (action: ActionType) => void;
   tilesRemaining: number;
-  turnTimer?: number;
 }
 
 const ACTION_CONFIG: Record<ActionType, { label: string; icon: string; color: string; hotkey: string }> = {
@@ -19,10 +18,9 @@ const ACTION_CONFIG: Record<ActionType, { label: string; icon: string; color: st
 };
 
 export default function ActionBar({
-  availableActions,
+  actions,
   onAction,
   tilesRemaining,
-  turnTimer,
 }: ActionBarProps) {
   return (
     <motion.div
@@ -61,30 +59,9 @@ export default function ActionBar({
         </span>
       </div>
 
-      {/* Timer */}
-      {turnTimer !== undefined && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 2,
-          paddingRight: 12,
-          borderRight: '1px solid var(--border-subtle)',
-          minWidth: 40,
-        }}>
-          <span style={{
-            fontFamily: "'Press Start 2P', cursive",
-            fontSize: 12,
-            color: turnTimer <= 5 ? 'var(--dragon-red)' : 'var(--text-secondary)',
-          }}>
-            {turnTimer}s
-          </span>
-        </div>
-      )}
-
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 6 }}>
-        {availableActions.map((action) => {
+        {actions.map((action) => {
           const config = ACTION_CONFIG[action];
           return (
             <motion.button
@@ -106,6 +83,7 @@ export default function ActionBar({
                 fontFamily: "'DM Sans', sans-serif",
                 cursor: 'pointer',
                 boxShadow: `0 2px 8px ${config.color}40`,
+                transition: 'all 0.2s ease',
               }}
             >
               <span>{config.icon}</span>

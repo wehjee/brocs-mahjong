@@ -1,11 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { GameState, Tile, ActionType, TileDefinition, SeatWind, Meld } from '../types/game';
+import type { GameState, Tile, ActionType, TileDefinition, SeatWind } from '../types/game';
 import { generateTileSet } from '../types/game';
 import {
   drawTile,
   discardTile,
   advanceTurn,
-  sortHand,
   checkWin,
   aiChooseDiscard,
   aiShouldPong,

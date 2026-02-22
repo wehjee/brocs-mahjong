@@ -7,7 +7,8 @@ interface GameScreenProps {
   onBackToLobby: () => void;
 }
 
-export default function GameScreen({ playerName, onPlayAgain, onBackToLobby }: GameScreenProps) {
+export default function GameScreen({ playerName, onPlayAgain, onBackToLobby: _onBackToLobby }: GameScreenProps) {
+  void _onBackToLobby;
   const engine = useGameEngine(playerName || 'Player');
 
   return (
