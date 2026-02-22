@@ -164,6 +164,56 @@ export function canChi(hand: Tile[], discardDef: TileDefinition, claimerIndex: n
   return null;
 }
 
+export function doChi(state: GameState, claimerIndex: number, chiTiles: Tile[]): GameState {
+  const discard = state.lastDiscard;
+  if (!discard) return state;
+
+  // Remove chi tiles from hand
+  const chiIds = new Set(chiTiles.map(t => t.id));
+  const claimer = state.players[claimerIndex];
+  const newHand = claimer.hand.filter(t => !chiIds.has(t.id));
+  const discarderIdx = state.lastDiscardPlayer!;
+
+  // Sort the meld tiles by value for display
+  const meldTiles = [...chiTiles, discard].sort((a, b) => {
+    const aVal = a.definition.type === 'suit' ? a.definition.value : 0;
+    const bVal = b.definition.type === 'suit' ? b.definition.value : 0;
+    return aVal - bVal;
+  });
+
+  const meld: Meld = {
+    type: 'chi',
+    tiles: meldTiles,
+  };
+
+  const players = state.players.map((p, i) => {
+    if (i === claimerIndex) {
+      return {
+        ...p,
+        hand: sortHand(newHand),
+        melds: [...p.melds, meld],
+        isCurrentTurn: true,
+      };
+    }
+    if (i === discarderIdx) {
+      return {
+        ...p,
+        discards: p.discards.filter(t => t.id !== discard.id),
+        isCurrentTurn: false,
+      };
+    }
+    return { ...p, isCurrentTurn: false };
+  });
+
+  return {
+    ...state,
+    players,
+    currentPlayerIndex: claimerIndex,
+    lastDiscard: null,
+    lastDiscardPlayer: null,
+  };
+}
+
 export function doPong(state: GameState, claimerIndex: number): GameState {
   const discard = state.lastDiscard;
   if (!discard) return state;
@@ -212,18 +262,215 @@ export function doPong(state: GameState, claimerIndex: number): GameState {
   };
 }
 
+// ── Kong operations ────────────────────────────────────────────────────
+
+// Exposed kong: claim a discard when you have 3 matching tiles
+export function doKong(state: GameState, claimerIndex: number): GameState {
+  const discard = state.lastDiscard;
+  if (!discard) return state;
+
+  const claimer = state.players[claimerIndex];
+  const kongTiles = canKong(claimer.hand, discard.definition);
+  if (!kongTiles) return state;
+
+  const kongIds = new Set(kongTiles.map(t => t.id));
+  const newHand = claimer.hand.filter(t => !kongIds.has(t.id));
+  const discarderIdx = state.lastDiscardPlayer!;
+
+  const meld: Meld = {
+    type: 'kong',
+    tiles: [...kongTiles, discard],
+  };
+
+  const players = state.players.map((p, i) => {
+    if (i === claimerIndex) {
+      return {
+        ...p,
+        hand: sortHand(newHand),
+        melds: [...p.melds, meld],
+        isCurrentTurn: true,
+      };
+    }
+    if (i === discarderIdx) {
+      return {
+        ...p,
+        discards: p.discards.filter(t => t.id !== discard.id),
+        isCurrentTurn: false,
+      };
+    }
+    return { ...p, isCurrentTurn: false };
+  });
+
+  // Kong: player draws a replacement tile from wall tail
+  let wall = [...state.wall];
+  if (wall.length > 0) {
+    const replacement = wall.pop()!;
+    replacement.faceUp = true;
+
+    // Handle bonus tile chain from replacement
+    const revealedBonuses: Tile[] = [];
+    let currentTile = replacement;
+    while (currentTile.definition.type === 'bonus') {
+      revealedBonuses.push(currentTile);
+      if (wall.length === 0) break;
+      const next = wall.pop()!;
+      next.faceUp = true;
+      currentTile = next;
+    }
+
+    const finalIsBonus = currentTile.definition.type === 'bonus';
+    const updatedPlayers = players.map((p, i) => {
+      if (i !== claimerIndex) return p;
+      return {
+        ...p,
+        hand: finalIsBonus ? p.hand : sortHand([...p.hand, currentTile]),
+        revealedBonuses: [...p.revealedBonuses, ...revealedBonuses],
+      };
+    });
+
+    return {
+      ...state,
+      wall,
+      players: updatedPlayers,
+      currentPlayerIndex: claimerIndex,
+      lastDiscard: null,
+      lastDiscardPlayer: null,
+      tilesRemaining: wall.length,
+      phase: wall.length === 0 && finalIsBonus ? 'finished' : state.phase,
+    };
+  }
+
+  return {
+    ...state,
+    wall,
+    players,
+    currentPlayerIndex: claimerIndex,
+    lastDiscard: null,
+    lastDiscardPlayer: null,
+    tilesRemaining: wall.length,
+  };
+}
+
+// Self kong: either promote an existing pong to kong, or declare concealed kong
+export function canSelfKong(player: Player): { type: 'promote'; meldIndex: number; tile: Tile } | { type: 'concealed'; tiles: Tile[] } | null {
+  // Check if hand has a tile matching an existing pong (promote)
+  for (let mi = 0; mi < player.melds.length; mi++) {
+    const meld = player.melds[mi];
+    if (meld.type === 'pong') {
+      const matchTile = player.hand.find(t => tilesMatch(t.definition, meld.tiles[0].definition));
+      if (matchTile) {
+        return { type: 'promote', meldIndex: mi, tile: matchTile };
+      }
+    }
+  }
+
+  // Check if hand has 4 of the same tile (concealed kong)
+  const counts = new Map<string, Tile[]>();
+  for (const t of player.hand) {
+    const key = tileKey(t.definition);
+    const arr = counts.get(key) ?? [];
+    arr.push(t);
+    counts.set(key, arr);
+  }
+  for (const [, tiles] of counts) {
+    if (tiles.length === 4) {
+      return { type: 'concealed', tiles };
+    }
+  }
+
+  return null;
+}
+
+export function doSelfKong(state: GameState, playerIndex: number): GameState {
+  const player = state.players[playerIndex];
+  const kongInfo = canSelfKong(player);
+  if (!kongInfo) return state;
+
+  let newHand: Tile[];
+  let newMelds: Meld[];
+
+  if (kongInfo.type === 'promote') {
+    // Remove the tile from hand, add to existing pong meld → becomes kong
+    newHand = player.hand.filter(t => t.id !== kongInfo.tile.id);
+    newMelds = player.melds.map((m, mi) => {
+      if (mi === kongInfo.meldIndex) {
+        return { type: 'kong' as const, tiles: [...m.tiles, kongInfo.tile] };
+      }
+      return m;
+    });
+  } else {
+    // Remove 4 tiles from hand, create concealed kong
+    const kongIds = new Set(kongInfo.tiles.map(t => t.id));
+    newHand = player.hand.filter(t => !kongIds.has(t.id));
+    newMelds = [...player.melds, { type: 'concealed-kong' as const, tiles: kongInfo.tiles }];
+  }
+
+  // Draw replacement from wall tail
+  let wall = [...state.wall];
+  const revealedBonuses: Tile[] = [];
+
+  if (wall.length > 0) {
+    let currentTile = wall.pop()!;
+    currentTile.faceUp = true;
+
+    while (currentTile.definition.type === 'bonus') {
+      revealedBonuses.push(currentTile);
+      if (wall.length === 0) break;
+      currentTile = wall.pop()!;
+      currentTile.faceUp = true;
+    }
+
+    const finalIsBonus = currentTile.definition.type === 'bonus';
+    if (!finalIsBonus) {
+      newHand = sortHand([...newHand, currentTile]);
+    }
+
+    const players = state.players.map((p, i) => {
+      if (i !== playerIndex) return p;
+      return {
+        ...p,
+        hand: newHand,
+        melds: newMelds,
+        revealedBonuses: [...p.revealedBonuses, ...revealedBonuses],
+      };
+    });
+
+    return {
+      ...state,
+      wall,
+      players,
+      tilesRemaining: wall.length,
+      phase: wall.length === 0 && finalIsBonus ? 'finished' : state.phase,
+    };
+  }
+
+  // No wall tiles for replacement
+  const players = state.players.map((p, i) => {
+    if (i !== playerIndex) return p;
+    return { ...p, hand: sortHand(newHand), melds: newMelds };
+  });
+
+  return { ...state, wall, players, tilesRemaining: wall.length };
+}
+
 // ── Win check (simplified: 4 sets + 1 pair) ────────────────────────────
 
 export function checkWin(hand: Tile[], melds: Meld[]): boolean {
-  // Total tiles needed: 14 = melds*3 + hand tiles
-  // With n melds revealed, hand should have 14 - n*3 tiles
+  // Total tiles needed: 14 = melds*3 + hand tiles (kong counts as 3 for tile math, 4 tiles in meld)
+  const meldSetCount = melds.length; // each meld = 1 set
   const handSize = hand.length;
-  const expectedHand = 14 - melds.length * 3;
+  const expectedHand = 14 - meldSetCount * 3;
   if (handSize !== expectedHand) return false;
 
   // Group hand tiles by their definition
   const groups = groupTiles(hand);
   return canFormSetsAndPair(groups);
+}
+
+// Check if adding a discard tile to the hand would form a win
+export function checkWinWithTile(hand: Tile[], melds: Meld[], tile: Tile): boolean {
+  const testHand = [...hand, tile];
+  return checkWin(testHand, melds);
 }
 
 function tileKey(def: TileDefinition): string {
@@ -425,9 +672,63 @@ export function calculateTai(
     breakdown.push({ name: 'Half Flush', tai: 2 });
   }
 
+  // ─ Special limit hands ─
+  // All Honors (only winds + dragons) = limit hand
+  const allHonors = allDefs.every(d => d.type === 'wind' || d.type === 'dragon');
+  if (allHonors) {
+    breakdown.push({ name: 'All Honors', tai: 10 });
+  }
+
+  // All Terminals (only 1s and 9s) = limit hand
+  const allTerminals = allDefs.every(d => d.type === 'suit' && (d.value === 1 || d.value === 9));
+  if (allTerminals) {
+    breakdown.push({ name: 'All Terminals', tai: 10 });
+  }
+
+  // Small Three Dragons (2 dragon pongs + 1 dragon pair in hand)
+  const dragonPongs = melds.filter(m => (m.type === 'pong' || m.type === 'kong' || m.type === 'concealed-kong') && m.tiles[0].definition.type === 'dragon');
+  const dragonPairInHand = (() => {
+    const handDragons = hand.filter(t => t.definition.type === 'dragon');
+    const dragonCounts = new Map<string, number>();
+    for (const t of handDragons) {
+      if (t.definition.type === 'dragon') {
+        const key = t.definition.color;
+        dragonCounts.set(key, (dragonCounts.get(key) ?? 0) + 1);
+      }
+    }
+    return Array.from(dragonCounts.values()).some(c => c >= 2);
+  })();
+  if (dragonPongs.length === 2 && dragonPairInHand) {
+    breakdown.push({ name: 'Small Three Dragons', tai: 4 });
+  }
+  // Big Three Dragons (3 dragon pongs)
+  if (dragonPongs.length === 3) {
+    breakdown.push({ name: 'Big Three Dragons', tai: 8 });
+  }
+
+  // Small Four Winds (3 wind pongs + 1 wind pair)
+  const windPongs = melds.filter(m => (m.type === 'pong' || m.type === 'kong' || m.type === 'concealed-kong') && m.tiles[0].definition.type === 'wind');
+  const windPairInHand = (() => {
+    const handWinds = hand.filter(t => t.definition.type === 'wind');
+    const windCounts = new Map<string, number>();
+    for (const t of handWinds) {
+      if (t.definition.type === 'wind') {
+        const key = t.definition.direction;
+        windCounts.set(key, (windCounts.get(key) ?? 0) + 1);
+      }
+    }
+    return Array.from(windCounts.values()).some(c => c >= 2);
+  })();
+  if (windPongs.length === 3 && windPairInHand) {
+    breakdown.push({ name: 'Small Four Winds', tai: 8 });
+  }
+  if (windPongs.length === 4) {
+    breakdown.push({ name: 'Big Four Winds', tai: 10 });
+  }
+
   const tai = breakdown.reduce((sum, b) => sum + b.tai, 0);
-  // Minimum 1 tai for a valid win
-  const finalTai = Math.max(tai, 1);
+  // Minimum 1 tai for a valid win; cap at 10 tai (max limit)
+  const finalTai = Math.min(Math.max(tai, 1), 10);
   // Base points: 2^tai (Singapore table stake calculation)
   const basePoints = Math.pow(2, finalTai);
 
@@ -528,4 +829,30 @@ export function aiShouldPong(player: Player, discard: Tile): boolean {
 
   // 30% chance to pong other things for variety
   return Math.random() < 0.3;
+}
+
+export function aiShouldKong(player: Player, discard: Tile): boolean {
+  // Always kong if possible (it's strictly better than pong — free replacement tile)
+  return canKong(player.hand, discard.definition) !== null;
+}
+
+export function aiShouldChi(player: Player, discard: Tile, discarderIndex: number, claimerIndex: number): Tile[] | null {
+  const chiTiles = canChi(player.hand, discard.definition, claimerIndex, discarderIndex);
+  if (!chiTiles) return null;
+
+  // Chi if the discard is a suit tile and we're close to a flush
+  const def = discard.definition;
+  if (def.type !== 'suit') return null;
+
+  // Always chi dragons/winds... can't, they're not suit.
+  // Chi 40% of the time for variety
+  if (Math.random() < 0.4) return chiTiles;
+  return null;
+}
+
+export function aiShouldSelfKong(player: Player): boolean {
+  const kongInfo = canSelfKong(player);
+  if (!kongInfo) return false;
+  // Always self-kong if possible
+  return true;
 }

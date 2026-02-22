@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
-import { checkWin } from '../engine/gameEngine';
+import { checkWin, checkWinWithTile, canPong, canKong, canChi, canSelfKong } from '../engine/gameEngine';
 import PlayerHand from './PlayerHand';
 import DiscardPool from './DiscardPool';
 import PlayerInfo from './PlayerInfo';
@@ -66,6 +66,7 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
     paymentResult,
     selectTile,
     performAction,
+    startNextRound,
   } = engine;
 
   const currentPlayerId = 'player-0';
@@ -87,7 +88,9 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   };
 
   // Only show buttons when the action is actually available
-  const canWin = checkWin(me.hand, me.melds) && me.hand.length === 14 - me.melds.length * 3;
+  const canWinSelfDraw = checkWin(me.hand, me.melds) && me.hand.length === 14 - me.melds.length * 3;
+  const lastDiscard = gameState.lastDiscard;
+  const lastDiscarder = gameState.lastDiscardPlayer;
 
   const availableActions: ActionType[] = (() => {
     switch (turnPhase) {
@@ -95,13 +98,19 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
         return ['draw' as ActionType];
       case 'human-needs-discard': {
         const actions: ActionType[] = [];
+        if (canSelfKong(me)) actions.push('kong');
         if (selectedTileId) actions.push('discard');
-        if (canWin) actions.push('win');
+        if (canWinSelfDraw) actions.push('win');
         return actions;
       }
       case 'claim-window': {
-        const actions: ActionType[] = ['pong'];
-        if (canWin) actions.push('win');
+        if (!lastDiscard || lastDiscarder === null) return ['pass' as ActionType];
+        const actions: ActionType[] = [];
+        const canWinFromDiscard = checkWinWithTile(me.hand, me.melds, lastDiscard);
+        if (canWinFromDiscard) actions.push('win');
+        if (canKong(me.hand, lastDiscard.definition)) actions.push('kong');
+        if (canPong(me.hand, lastDiscard.definition)) actions.push('pong');
+        if (canChi(me.hand, lastDiscard.definition, 0, lastDiscarder)) actions.push('chi');
         actions.push('pass');
         return actions;
       }
@@ -334,6 +343,8 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
             taiResult={taiResult}
             paymentResult={paymentResult}
             players={gameState.players}
+            roundInfo={{ roundWind: gameState.roundWind, roundNumber: gameState.roundNumber }}
+            onNextRound={startNextRound}
             onPlayAgain={onPlayAgain}
           />
         )}

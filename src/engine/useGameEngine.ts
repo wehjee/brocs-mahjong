@@ -6,10 +6,20 @@ import {
   discardTile,
   advanceTurn,
   checkWin,
+  checkWinWithTile,
   aiChooseDiscard,
   aiShouldPong,
+  aiShouldKong,
+  aiShouldChi,
+  aiShouldSelfKong,
   canPong,
+  canKong,
+  canChi,
+  canSelfKong,
   doPong,
+  doChi,
+  doKong,
+  doSelfKong,
   tileOrder,
   calculateTai,
   calculatePayments,
@@ -124,6 +134,7 @@ export interface GameEngine {
   paymentResult: PaymentResult | null;
   selectTile: (tileId: string) => void;
   performAction: (action: ActionType) => void;
+  startNextRound: () => void;
 }
 
 const AI_DELAY = 800; // ms between AI actions
@@ -166,7 +177,6 @@ export function useGameEngine(humanName: string): GameEngine {
           return;
         }
         const after = drawTile(gs, humanIdx);
-        // Check self-draw win
         const p = after.players[humanIdx];
         if (checkWin(p.hand, p.melds)) {
           setMessage('You can win! Click Win to declare.');
@@ -181,9 +191,20 @@ export function useGameEngine(humanName: string): GameEngine {
         setSelectedTileId(null);
         setMessage(null);
         setGameState(after);
-        // Open claim window briefly, then advance to next AI
         setTurnPhase('claim-window');
         scheduleAiClaimCheck(after);
+        break;
+      }
+      case 'chi': {
+        if (turnPhase !== 'claim-window' || !gs.lastDiscard) return;
+        const discarderIdx = gs.lastDiscardPlayer!;
+        const chiTiles = canChi(gs.players[humanIdx].hand, gs.lastDiscard.definition, humanIdx, discarderIdx);
+        if (chiTiles) {
+          const result = doChi(gs, humanIdx, chiTiles);
+          setGameState(result);
+          setTurnPhase('human-needs-discard');
+          setMessage('Chi! Now discard a tile.');
+        }
         break;
       }
       case 'pong': {
@@ -196,25 +217,66 @@ export function useGameEngine(humanName: string): GameEngine {
         }
         break;
       }
+      case 'kong': {
+        if (turnPhase === 'human-needs-discard') {
+          // Self-kong: concealed kong or promote pong
+          const result = doSelfKong(gs, humanIdx);
+          if (result !== gs) {
+            setGameState(result);
+            const p = result.players[humanIdx];
+            if (checkWin(p.hand, p.melds)) {
+              setMessage('Kong! You can win!');
+            } else {
+              setMessage('Kong! Now discard a tile.');
+            }
+          }
+        } else if (turnPhase === 'claim-window' && gs.lastDiscard) {
+          // Exposed kong: claim discard when you have 3 matching tiles
+          const result = doKong(gs, humanIdx);
+          if (result !== gs) {
+            setGameState(result);
+            const p = result.players[humanIdx];
+            if (checkWin(p.hand, p.melds)) {
+              setMessage('Kong! You can win!');
+            } else {
+              setMessage('Kong! Now discard a tile.');
+            }
+            setTurnPhase('human-needs-discard');
+          }
+        }
+        break;
+      }
       case 'win': {
         const p = gs.players[humanIdx];
-        if (checkWin(p.hand, p.melds)) {
-          // Self-draw if it's discard phase (just drew), not claim window (off someone's discard)
-          const selfDraw = turnPhase === 'human-needs-discard';
-          endRound(humanIdx, selfDraw);
+        if (turnPhase === 'human-needs-discard') {
+          // Self-draw win
+          if (checkWin(p.hand, p.melds)) {
+            endRound(humanIdx, true);
+          }
+        } else if (turnPhase === 'claim-window' && gs.lastDiscard) {
+          // Win off discard
+          if (checkWinWithTile(p.hand, p.melds, gs.lastDiscard)) {
+            // Add discard to hand first
+            const newHand = [...p.hand, gs.lastDiscard];
+            const discarderIdx = gs.lastDiscardPlayer!;
+            const updatedPlayers = gs.players.map((pl, i) => {
+              if (i === humanIdx) return { ...pl, hand: newHand };
+              if (i === discarderIdx) return { ...pl, discards: pl.discards.filter(t => t.id !== gs.lastDiscard!.id) };
+              return pl;
+            });
+            setGameState({ ...gs, players: updatedPlayers, lastDiscard: null, lastDiscardPlayer: null });
+            endRound(humanIdx, false);
+          }
         }
         break;
       }
       case 'pass': {
         if (turnPhase === 'claim-window') {
           setMessage(null);
-          // Human passed — check if any AI wants to claim, then advance
           if (gs.lastDiscardPlayer !== null && gs.lastDiscardPlayer !== humanIdx) {
-            // AI discarded, human passed — let other AIs try to claim, then advance
             setTurnPhase('ai-thinking');
             aiClaimCheckAfterAi(gs, gs.lastDiscardPlayer);
           } else {
-            // Human discarded earlier, this was their own claim window — just advance
             const after = advanceTurn(gs);
             setGameState(after);
             setTurnPhase('ai-thinking');
@@ -231,24 +293,80 @@ export function useGameEngine(humanName: string): GameEngine {
 
   function scheduleAiClaimCheck(gs: GameState) {
     timerRef.current = setTimeout(() => {
-      // Check if any AI wants to pong
       const discard = gs.lastDiscard;
       if (!discard) {
         advanceToNextPlayer(gs);
         return;
       }
+      const discarderIdx = gs.lastDiscardPlayer!;
 
+      // Priority: Win > Kong > Pong > Chi (chi only for next player)
+      // Check all AIs for win first
       for (let i = 1; i <= 3; i++) {
+        const player = gs.players[i];
+        if (checkWinWithTile(player.hand, player.melds, discard)) {
+          // AI wins off the discard
+          const newHand = [...player.hand, discard];
+          const updatedPlayers = gs.players.map((p, pi) => {
+            if (pi === i) return { ...p, hand: newHand };
+            if (pi === discarderIdx) return { ...p, discards: p.discards.filter(t => t.id !== discard.id) };
+            return p;
+          });
+          const updatedGs = { ...gs, players: updatedPlayers, lastDiscard: null, lastDiscardPlayer: null };
+          setGameState(updatedGs);
+          timerRef.current = setTimeout(() => {
+            endRound(i, false);
+          }, AI_DELAY);
+          return;
+        }
+      }
+
+      // Check kong (any AI)
+      for (let i = 1; i <= 3; i++) {
+        if (i === discarderIdx) continue;
+        const player = gs.players[i];
+        if (aiShouldKong(player, discard)) {
+          const result = doKong(gs, i);
+          if (result !== gs) {
+            setMessage(`${player.name} Kong!`);
+            setGameState(result);
+            const p = result.players[i];
+            if (checkWin(p.hand, p.melds)) {
+              timerRef.current = setTimeout(() => endRound(i, true), AI_DELAY);
+              return;
+            }
+            timerRef.current = setTimeout(() => runAiDiscard(result, i), AI_DELAY);
+            return;
+          }
+        }
+      }
+
+      // Check pong (any AI)
+      for (let i = 1; i <= 3; i++) {
+        if (i === discarderIdx) continue;
         const player = gs.players[i];
         if (aiShouldPong(player, discard)) {
           const pongResult = doPong(gs, i);
           if (pongResult !== gs) {
             setMessage(`${player.name} Pong!`);
             setGameState(pongResult);
-            // That AI now needs to discard
-            timerRef.current = setTimeout(() => {
-              runAiDiscard(pongResult, i);
-            }, AI_DELAY);
+            timerRef.current = setTimeout(() => runAiDiscard(pongResult, i), AI_DELAY);
+            return;
+          }
+        }
+      }
+
+      // Check chi (only next player after discarder)
+      const chiPlayer = (discarderIdx + 1) % 4;
+      if (chiPlayer !== 0) { // Only AI chi
+        const player = gs.players[chiPlayer];
+        const chiTiles = aiShouldChi(player, discard, discarderIdx, chiPlayer);
+        if (chiTiles) {
+          const result = doChi(gs, chiPlayer, chiTiles);
+          if (result !== gs) {
+            setMessage(`${player.name} Chi!`);
+            setGameState(result);
+            timerRef.current = setTimeout(() => runAiDiscard(result, chiPlayer), AI_DELAY);
             return;
           }
         }
@@ -256,7 +374,7 @@ export function useGameEngine(humanName: string): GameEngine {
 
       // No claims, advance normally
       advanceToNextPlayer(gs);
-    }, 600); // brief claim window
+    }, 600);
   }
 
   function advanceToNextPlayer(gs: GameState) {
@@ -294,9 +412,62 @@ export function useGameEngine(humanName: string): GameEngine {
       // Check if AI won (self-draw)
       if (checkWin(player.hand, player.melds)) {
         timerRef.current = setTimeout(() => {
-          endRound(idx, true); // self-draw
+          endRound(idx, true);
         }, AI_DELAY);
         return;
+      }
+
+      // Check if AI can self-kong
+      if (aiShouldSelfKong(player)) {
+        const kongInfo = canSelfKong(player);
+        if (kongInfo && kongInfo.type === 'promote') {
+          // Robbing the kong: check if anyone can win off the promoted tile
+          const promotedTileDef = kongInfo.tile.definition;
+          // Check human first
+          const humanPlayer = afterDraw.players[0];
+          const fakeDiscard: Tile = { id: 'rob-kong', definition: promotedTileDef, faceUp: true };
+          if (checkWinWithTile(humanPlayer.hand, humanPlayer.melds, fakeDiscard)) {
+            setMessage(`${player.name} promotes Kong — You can rob the Kong!`);
+            // Store the promoted tile info in gameState for the claim
+            const gsWithKongInfo = {
+              ...afterDraw,
+              lastDiscard: kongInfo.tile,
+              lastDiscardPlayer: idx,
+            };
+            setGameState(gsWithKongInfo);
+            setTurnPhase('claim-window');
+            return;
+          }
+          // Check other AIs
+          for (let j = 1; j <= 3; j++) {
+            if (j === idx) continue;
+            if (checkWinWithTile(afterDraw.players[j].hand, afterDraw.players[j].melds, fakeDiscard)) {
+              // AI robs the kong
+              const newHand = [...afterDraw.players[j].hand, kongInfo.tile];
+              const updatedPlayers = afterDraw.players.map((p, pi) => {
+                if (pi === j) return { ...p, hand: newHand };
+                return p;
+              });
+              setGameState({ ...afterDraw, players: updatedPlayers });
+              timerRef.current = setTimeout(() => endRound(j, false), AI_DELAY);
+              setMessage(`${afterDraw.players[j].name} robs ${player.name}'s Kong!`);
+              return;
+            }
+          }
+        }
+
+        const afterKong = doSelfKong(afterDraw, idx);
+        if (afterKong !== afterDraw) {
+          setMessage(`${player.name} Kong!`);
+          setGameState(afterKong);
+          const pAfterKong = afterKong.players[idx];
+          if (checkWin(pAfterKong.hand, pAfterKong.melds)) {
+            timerRef.current = setTimeout(() => endRound(idx, true), AI_DELAY);
+            return;
+          }
+          timerRef.current = setTimeout(() => runAiDiscard(afterKong, idx), AI_DELAY);
+          return;
+        }
       }
 
       // AI discards after a delay
@@ -318,15 +489,26 @@ export function useGameEngine(humanName: string): GameEngine {
     setGameState(afterDiscard);
     setMessage(`${player.name} discarded a tile`);
 
-    // Check if human can pong
+    // Check if human can claim (win > kong > pong > chi)
     const discard = afterDiscard.lastDiscard;
     if (discard) {
-      const humanHand = afterDiscard.players[0].hand;
-      const humanCanPong = canPong(humanHand, discard.definition);
-      if (humanCanPong) {
+      const humanPlayer = afterDiscard.players[0];
+      const humanCanWin = checkWinWithTile(humanPlayer.hand, humanPlayer.melds, discard);
+      const humanCanKong = canKong(humanPlayer.hand, discard.definition) !== null;
+      const humanCanPong = canPong(humanPlayer.hand, discard.definition) !== null;
+      const humanCanChi = canChi(humanPlayer.hand, discard.definition, 0, idx) !== null;
+
+      if (humanCanWin || humanCanKong || humanCanPong || humanCanChi) {
         setTurnPhase('claim-window');
-        setMessage(`${player.name} discarded — You can Pong!`);
-        // No timer — wait for human to explicitly Pong or Pass
+        if (humanCanWin) {
+          setMessage(`${player.name} discarded — You can Win!`);
+        } else if (humanCanKong) {
+          setMessage(`${player.name} discarded — You can Kong!`);
+        } else if (humanCanPong) {
+          setMessage(`${player.name} discarded — You can Pong!`);
+        } else {
+          setMessage(`${player.name} discarded — You can Chi!`);
+        }
         return;
       }
     }
@@ -344,7 +526,46 @@ export function useGameEngine(humanName: string): GameEngine {
       return;
     }
 
-    // Check other AIs for pong
+    // Priority: Win > Kong > Pong > Chi
+    // Check wins first
+    for (let i = 1; i <= 3; i++) {
+      if (i === discarderIdx) continue;
+      const player = gs.players[i];
+      if (checkWinWithTile(player.hand, player.melds, discard)) {
+        const newHand = [...player.hand, discard];
+        const updatedPlayers = gs.players.map((p, pi) => {
+          if (pi === i) return { ...p, hand: newHand };
+          if (pi === discarderIdx) return { ...p, discards: p.discards.filter(t => t.id !== discard.id) };
+          return p;
+        });
+        const updatedGs = { ...gs, players: updatedPlayers, lastDiscard: null, lastDiscardPlayer: null };
+        setGameState(updatedGs);
+        timerRef.current = setTimeout(() => endRound(i, false), AI_DELAY);
+        return;
+      }
+    }
+
+    // Check kong
+    for (let i = 1; i <= 3; i++) {
+      if (i === discarderIdx) continue;
+      const player = gs.players[i];
+      if (aiShouldKong(player, discard)) {
+        const result = doKong(gs, i);
+        if (result !== gs) {
+          setMessage(`${player.name} Kong!`);
+          setGameState(result);
+          const p = result.players[i];
+          if (checkWin(p.hand, p.melds)) {
+            timerRef.current = setTimeout(() => endRound(i, true), AI_DELAY);
+            return;
+          }
+          timerRef.current = setTimeout(() => runAiDiscard(result, i), AI_DELAY);
+          return;
+        }
+      }
+    }
+
+    // Check pong
     for (let i = 1; i <= 3; i++) {
       if (i === discarderIdx) continue;
       const player = gs.players[i];
@@ -353,9 +574,23 @@ export function useGameEngine(humanName: string): GameEngine {
         if (pongResult !== gs) {
           setMessage(`${player.name} Pong!`);
           setGameState(pongResult);
-          timerRef.current = setTimeout(() => {
-            runAiDiscard(pongResult, i);
-          }, AI_DELAY);
+          timerRef.current = setTimeout(() => runAiDiscard(pongResult, i), AI_DELAY);
+          return;
+        }
+      }
+    }
+
+    // Check chi (only next player after discarder)
+    const chiPlayer = (discarderIdx + 1) % 4;
+    if (chiPlayer !== 0) {
+      const player = gs.players[chiPlayer];
+      const chiTiles = aiShouldChi(player, discard, discarderIdx, chiPlayer);
+      if (chiTiles) {
+        const result = doChi(gs, chiPlayer, chiTiles);
+        if (result !== gs) {
+          setMessage(`${player.name} Chi!`);
+          setGameState(result);
+          timerRef.current = setTimeout(() => runAiDiscard(result, chiPlayer), AI_DELAY);
           return;
         }
       }
@@ -410,12 +645,86 @@ export function useGameEngine(humanName: string): GameEngine {
     }
   }
 
-  // Start AI turns if game begins and it's not human's turn (shouldn't happen, but safety)
-  useEffect(() => {
-    if (gameState.phase === 'playing' && gameState.currentPlayerIndex === 0 && turnPhase === 'human-needs-draw') {
-      // It's human's turn to draw — do nothing, wait for input
+  // ── Next round with wind progression ──────────────────────────────────
+  const startNextRound = useCallback(() => {
+    const prevGs = stateRef.current;
+    const prevScores = prevGs.players.map(p => p.score);
+    const prevRoundNumber = prevGs.roundNumber;
+    const prevRoundWind = prevGs.roundWind;
+
+    // Wind progression: rotate dealer (East moves to next player)
+    // After 4 rounds in a wind, advance to next wind
+    // East→South→West→North, then game ends after North round
+    const windOrder: SeatWind[] = ['east', 'south', 'west', 'north'];
+    let nextRoundNumber = prevRoundNumber + 1;
+    let nextRoundWind = prevRoundWind;
+
+    // Every 4 rounds, advance the round wind
+    if (nextRoundNumber > 4) {
+      const windIdx = windOrder.indexOf(prevRoundWind as SeatWind);
+      if (windIdx < 3) {
+        nextRoundWind = windOrder[windIdx + 1];
+        nextRoundNumber = 1;
+      } else {
+        // Game complete (after North round 4) — restart from East
+        nextRoundWind = 'east';
+        nextRoundNumber = 1;
+      }
     }
-  }, [gameState.phase, gameState.currentPlayerIndex, turnPhase]);
+
+    // Create fresh game state
+    const newGs = createInitialState(prevGs.players[0].name);
+
+    // Rotate seat winds: each player shifts one position
+    const seatRotation: SeatWind[] = ['east', 'south', 'west', 'north'];
+
+    // Preserve scores and rotate seats
+    const updatedPlayers = newGs.players.map((p, i) => {
+      const prevSeatIdx = seatRotation.indexOf(prevGs.players[i].seatWind);
+      const newSeatIdx = (prevSeatIdx + 1) % 4;
+      return {
+        ...p,
+        score: prevScores[i],
+        seatWind: seatRotation[newSeatIdx],
+      };
+    });
+
+    // Find who is now East (dealer) — they start
+    const eastIdx = updatedPlayers.findIndex(p => p.seatWind === 'east');
+    const finalPlayers = updatedPlayers.map((p, i) => ({
+      ...p,
+      isCurrentTurn: i === eastIdx,
+    }));
+
+    const finalGs: GameState = {
+      ...newGs,
+      players: finalPlayers,
+      currentPlayerIndex: eastIdx,
+      roundWind: nextRoundWind,
+      roundNumber: nextRoundNumber,
+    };
+
+    setGameState(finalGs);
+    setWinner(null);
+    setMessage(null);
+    setTaiResult(null);
+    setPaymentResult(null);
+    setSelectedTileId(null);
+
+    if (eastIdx === 0) {
+      // Human is East — starts with 14 tiles, needs to discard
+      setTurnPhase('human-needs-discard');
+    } else {
+      // AI is East — human waits for their turn
+      setTurnPhase('ai-thinking');
+      // Need to schedule AI turns starting from East
+      // But East already has 14 tiles, so they start with discard
+      timerRef.current = setTimeout(() => {
+        runAiDiscard(finalGs, eastIdx);
+      }, AI_DELAY);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     gameState,
@@ -427,5 +736,6 @@ export function useGameEngine(humanName: string): GameEngine {
     paymentResult,
     selectTile,
     performAction,
+    startNextRound,
   };
 }

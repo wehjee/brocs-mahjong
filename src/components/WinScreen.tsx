@@ -10,10 +10,14 @@ interface WinScreenProps {
   taiResult: TaiResult | null;
   paymentResult: PaymentResult | null;
   players: Player[];
+  roundInfo: { roundWind: string; roundNumber: number };
+  onNextRound: () => void;
   onPlayAgain: () => void;
 }
 
-export default function WinScreen({ winner, message, taiResult, paymentResult, players, onPlayAgain }: WinScreenProps) {
+const WIND_LABELS: Record<string, string> = { east: 'East', south: 'South', west: 'West', north: 'North' };
+
+export default function WinScreen({ winner, message, taiResult, paymentResult, players, roundInfo, onNextRound, onPlayAgain }: WinScreenProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -218,26 +222,51 @@ export default function WinScreen({ winner, message, taiResult, paymentResult, p
           </div>
         )}
 
-        {/* Play again */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={onPlayAgain}
-          style={{
-            padding: '14px 36px',
-            background: 'linear-gradient(135deg, var(--jade-500), var(--jade-700))',
-            border: 'none',
-            borderRadius: 12,
-            color: 'white',
-            fontSize: 14,
-            fontWeight: 700,
-            fontFamily: "'DM Sans', sans-serif",
-            cursor: 'pointer',
-            letterSpacing: 0.5,
-          }}
-        >
-          Play Again
-        </motion.button>
+        {/* Round info */}
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
+          {WIND_LABELS[roundInfo.roundWind]} Wind — Round {roundInfo.roundNumber} of 4
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onNextRound}
+            style={{
+              padding: '14px 36px',
+              background: 'linear-gradient(135deg, var(--jade-500), var(--jade-700))',
+              border: 'none',
+              borderRadius: 12,
+              color: 'white',
+              fontSize: 14,
+              fontWeight: 700,
+              fontFamily: "'DM Sans', sans-serif",
+              cursor: 'pointer',
+              letterSpacing: 0.5,
+            }}
+          >
+            Next Round
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onPlayAgain}
+            style={{
+              padding: '14px 24px',
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 12,
+              color: 'var(--text-secondary)',
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "'DM Sans', sans-serif",
+              cursor: 'pointer',
+            }}
+          >
+            New Game
+          </motion.button>
+        </div>
       </motion.div>
     </motion.div>
   );
