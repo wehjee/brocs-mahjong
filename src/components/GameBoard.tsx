@@ -32,6 +32,28 @@ function BonusTileDisplay({ player }: { player: Player }) {
   );
 }
 
+// Display revealed melds (pong/chi/kong) for any player
+function MeldDisplay({ player }: { player: Player }) {
+  if (player.melds.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {player.melds.map((meld, mi) => (
+        <div key={`meld-${mi}`} style={{
+          display: 'flex',
+          gap: 1,
+          padding: '2px 4px',
+          background: 'rgba(0,0,0,0.2)',
+          borderRadius: 4,
+        }}>
+          {meld.tiles.map((tile) => (
+            <MahjongTile key={tile.id} tile={tile} faceUp size="small" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   const {
     gameState,
@@ -157,10 +179,13 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
         }}>
           <PlayerInfo player={across} isCurrentTurn={across.isCurrentTurn} position="top" />
-          <div style={{ display: 'flex', gap: 1 }}>
-            {across.hand.map((tile, idx) => (
-              <MahjongTile key={tile.id} tile={tile} faceUp={false} size="small" index={idx} />
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <MeldDisplay player={across} />
+            <div style={{ display: 'flex', gap: 1 }}>
+              {across.hand.map((tile, idx) => (
+                <MahjongTile key={tile.id} tile={tile} faceUp={false} size="small" index={idx} />
+              ))}
+            </div>
           </div>
           <BonusTileDisplay player={across} />
           {/* Discards in front of them */}
@@ -177,6 +202,7 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <PlayerInfo player={left} isCurrentTurn={left.isCurrentTurn} position="left" />
+            <MeldDisplay player={left} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {left.hand.slice(0, 13).map((tile, idx) => (
                 <MahjongTile key={tile.id} tile={tile} faceUp={false} size="small" orientation="horizontal" index={idx} />
@@ -200,6 +226,7 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <PlayerInfo player={right} isCurrentTurn={right.isCurrentTurn} position="right" />
+            <MeldDisplay player={right} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {right.hand.slice(0, 13).map((tile, idx) => (
                 <MahjongTile key={tile.id} tile={tile} faceUp={false} size="small" orientation="horizontal" index={idx} />

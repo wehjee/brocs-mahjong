@@ -131,7 +131,8 @@ const AI_DELAY = 800; // ms between AI actions
 
 export function useGameEngine(humanName: string): GameEngine {
   const [gameState, setGameState] = useState<GameState>(() => createInitialState(humanName));
-  const [turnPhase, setTurnPhase] = useState<TurnPhase>('human-needs-draw');
+  // East starts with 14 tiles — go straight to discard phase
+  const [turnPhase, setTurnPhase] = useState<TurnPhase>('human-needs-discard');
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [winner, setWinner] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
