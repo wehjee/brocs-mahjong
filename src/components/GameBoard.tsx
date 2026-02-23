@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
@@ -55,6 +55,16 @@ function MeldDisplay({ player }: { player: Player }) {
     </div>
   );
 }
+
+const HOTKEY_MAP: Record<string, ActionType> = {
+  'd': 'draw',
+  'x': 'discard',
+  'c': 'chi',
+  'p': 'pong',
+  'k': 'kong',
+  'w': 'win',
+  ' ': 'pass',
+};
 
 export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   const {
@@ -122,15 +132,12 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   })();
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────
-  const HOTKEY_MAP: Record<string, ActionType> = {
-    'd': 'draw',
-    'x': 'discard',
-    'c': 'chi',
-    'p': 'pong',
-    'k': 'kong',
-    'w': 'win',
-    ' ': 'pass',
-  };
+  // Use refs to always access the latest values in the keydown handler
+  // without needing to teardown/re-register the listener on every render.
+  const availableActionsRef = useRef(availableActions);
+  availableActionsRef.current = availableActions;
+  const handleActionRef = useRef(handleAction);
+  handleActionRef.current = handleAction;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -139,14 +146,14 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
       const action = HOTKEY_MAP[e.key.toLowerCase()];
-      if (action && availableActions.includes(action)) {
+      if (action && availableActionsRef.current.includes(action)) {
         e.preventDefault();
-        handleAction(action);
+        handleActionRef.current(action);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [availableActions, handleAction]);
+  }, []);
 
   const phaseLabel = (() => {
     switch (turnPhase) {
