@@ -2,48 +2,45 @@ import { useState, useCallback } from 'react';
 import HomePage from './components/HomePage';
 import Lobby from './components/Lobby';
 import GameScreen from './components/GameScreen';
-import type { LobbyPlayer } from './types/game';
 
 type Screen = 'home' | 'lobby' | 'game';
+type GameMode = 'singleplayer' | 'multiplayer';
+
+const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || 'localhost:1999';
 
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerName, setPlayerName] = useState('');
-  const [playerId] = useState('player-0');
   const [roomCode, setRoomCode] = useState('');
-  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
-  const [gameKey, setGameKey] = useState(0); // forces re-mount for new game
+  const [gameMode, setGameMode] = useState<GameMode>('singleplayer');
+  const [gameKey, setGameKey] = useState(0);
 
+  // ── Play Solo (skip lobby, go straight to game with AI) ──────────
+  const handlePlaySolo = useCallback((name: string) => {
+    setPlayerName(name);
+    setGameMode('singleplayer');
+    setGameKey(k => k + 1);
+    setScreen('game');
+  }, []);
+
+  // ── Create multiplayer room ──────────────────────────────────────
   const handleCreateRoom = useCallback((name: string) => {
     setPlayerName(name);
     const code = generateRoomCode();
     setRoomCode(code);
-    setLobbyPlayers([
-      { id: 'player-0', name, avatar: '🥦', isReady: false, isHost: true },
-      { id: 'player-1', name: 'BrocBot', avatar: '🍄', isReady: true, isHost: false },
-      { id: 'player-2', name: 'TileKing', avatar: '🌽', isReady: true, isHost: false },
-      { id: 'player-3', name: 'MahJane', avatar: '🥕', isReady: true, isHost: false },
-    ]);
+    setGameMode('multiplayer');
     setScreen('lobby');
   }, []);
 
+  // ── Join existing multiplayer room ───────────────────────────────
   const handleJoinRoom = useCallback((name: string, code: string) => {
     setPlayerName(name);
     setRoomCode(code);
-    setLobbyPlayers([
-      { id: 'host-1', name: 'HostPlayer', avatar: '🥦', isReady: true, isHost: true },
-      { id: 'player-0', name, avatar: '🍄', isReady: false, isHost: false },
-      { id: 'player-2', name: 'TileKing', avatar: '🌽', isReady: true, isHost: false },
-    ]);
+    setGameMode('multiplayer');
     setScreen('lobby');
   }, []);
 
-  const handleToggleReady = useCallback(() => {
-    setLobbyPlayers(prev => prev.map(p =>
-      p.id === playerId ? { ...p, isReady: !p.isReady } : p
-    ));
-  }, [playerId]);
-
+  // ── Start game from lobby ────────────────────────────────────────
   const handleStartGame = useCallback(() => {
     setGameKey(k => k + 1);
     setScreen('game');
@@ -55,7 +52,6 @@ function App() {
 
   const handleLeave = useCallback(() => {
     setScreen('home');
-    setLobbyPlayers([]);
     setRoomCode('');
   }, []);
 
@@ -70,18 +66,17 @@ function App() {
           <HomePage
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
+            onPlaySolo={handlePlaySolo}
           />
         );
       case 'lobby':
         return (
           <Lobby
             roomCode={roomCode}
-            players={lobbyPlayers}
-            isHost={lobbyPlayers.find(p => p.id === playerId)?.isHost ?? false}
+            playerName={playerName}
+            partyHost={PARTYKIT_HOST}
             onStartGame={handleStartGame}
             onLeave={handleLeave}
-            onToggleReady={handleToggleReady}
-            currentPlayerId={playerId}
           />
         );
       case 'game':
@@ -89,6 +84,9 @@ function App() {
           <GameScreen
             key={gameKey}
             playerName={playerName}
+            gameMode={gameMode}
+            roomCode={roomCode}
+            partyHost={PARTYKIT_HOST}
             onPlayAgain={handlePlayAgain}
             onBackToLobby={handleBackToLobby}
           />

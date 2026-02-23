@@ -139,29 +139,37 @@ export function canKong(hand: Tile[], discardDef: TileDefinition): Tile[] | null
 }
 
 export function canChi(hand: Tile[], discardDef: TileDefinition, claimerIndex: number, discarderIndex: number): Tile[] | null {
+  const all = canAllChi(hand, discardDef, claimerIndex, discarderIndex);
+  return all.length > 0 ? all[0] : null;
+}
+
+// Returns ALL valid chi combinations for the player to choose from
+export function canAllChi(hand: Tile[], discardDef: TileDefinition, claimerIndex: number, discarderIndex: number): Tile[][] {
   // Chi can only be claimed from the player to your left (previous player)
-  if ((discarderIndex + 1) % 4 !== claimerIndex) return null;
-  if (discardDef.type !== 'suit') return null;
+  if ((discarderIndex + 1) % 4 !== claimerIndex) return [];
+  if (discardDef.type !== 'suit') return [];
 
   const suit = discardDef.suit;
   const val = discardDef.value;
   const suitTiles = hand.filter(t => t.definition.type === 'suit' && t.definition.suit === suit);
 
+  const results: Tile[][] = [];
+
   // Check all 3 possible sequences containing this tile
   const sequences: [number, number][] = [
-    [val - 2, val - 1], // tile is the high end
-    [val - 1, val + 1], // tile is the middle
-    [val + 1, val + 2], // tile is the low end
+    [val - 2, val - 1], // tile is the high end (e.g. discard=7, need 5+6)
+    [val - 1, val + 1], // tile is the middle  (e.g. discard=7, need 6+8)
+    [val + 1, val + 2], // tile is the low end  (e.g. discard=7, need 8+9)
   ];
 
   for (const [v1, v2] of sequences) {
     if (v1 < 1 || v1 > 9 || v2 < 1 || v2 > 9) continue;
     const t1 = suitTiles.find(t => t.definition.type === 'suit' && t.definition.value === v1);
     const t2 = suitTiles.find(t => t.definition.type === 'suit' && t.definition.value === v2 && t.id !== t1?.id);
-    if (t1 && t2) return [t1, t2];
+    if (t1 && t2) results.push([t1, t2]);
   }
 
-  return null;
+  return results;
 }
 
 export function doChi(state: GameState, claimerIndex: number, chiTiles: Tile[]): GameState {

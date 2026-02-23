@@ -15,6 +15,7 @@ import {
   canPong,
   canKong,
   canChi,
+  canAllChi,
   canSelfKong,
   doPong,
   doChi,
@@ -117,7 +118,7 @@ function createInitialState(humanName: string, dealerIndex = 0): GameState {
 
 // ── Turn phases ─────────────────────────────────────────────────────────
 
-type TurnPhase =
+export type TurnPhase =
   | 'human-needs-draw'     // human's turn, hasn't drawn yet
   | 'human-needs-discard'  // human drew, must select + discard
   | 'claim-window'         // a tile was discarded, others can claim
@@ -125,6 +126,7 @@ type TurnPhase =
   | 'round-over';          // someone won or wall exhausted
 
 export interface GameEngine {
+  myIndex: number;
   gameState: GameState;
   turnPhase: TurnPhase;
   selectedTileId: string | null;
@@ -132,8 +134,10 @@ export interface GameEngine {
   message: string | null;
   taiResult: TaiResult | null;
   paymentResult: PaymentResult | null;
+  chiOptions: Tile[][] | null; // multiple chi combos for player to pick
   selectTile: (tileId: string) => void;
   performAction: (action: ActionType) => void;
+  selectChi: (index: number) => void;
   startNextRound: () => void;
 }
 
@@ -148,6 +152,7 @@ export function useGameEngine(humanName: string): GameEngine {
   const [message, setMessage] = useState<string | null>(null);
   const [taiResult, setTaiResult] = useState<TaiResult | null>(null);
   const [paymentResult, setPaymentResult] = useState<PaymentResult | null>(null);
+  const [chiOptions, setChiOptions] = useState<Tile[][] | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateRef = useRef(gameState);
@@ -198,12 +203,17 @@ export function useGameEngine(humanName: string): GameEngine {
       case 'chi': {
         if (turnPhase !== 'claim-window' || !gs.lastDiscard) return;
         const discarderIdx = gs.lastDiscardPlayer!;
-        const chiTiles = canChi(gs.players[humanIdx].hand, gs.lastDiscard.definition, humanIdx, discarderIdx);
-        if (chiTiles) {
-          const result = doChi(gs, humanIdx, chiTiles);
+        const allOptions = canAllChi(gs.players[humanIdx].hand, gs.lastDiscard.definition, humanIdx, discarderIdx);
+        if (allOptions.length === 1) {
+          // Only one combo — use it directly
+          const result = doChi(gs, humanIdx, allOptions[0]);
           setGameState(result);
           setTurnPhase('human-needs-discard');
           setMessage('Chi! Now discard a tile.');
+        } else if (allOptions.length > 1) {
+          // Multiple combos — show picker
+          setChiOptions(allOptions);
+          setMessage('Choose which tiles to Chi with:');
         }
         break;
       }
@@ -288,6 +298,18 @@ export function useGameEngine(humanName: string): GameEngine {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnPhase, selectedTileId]);
+
+  const selectChi = useCallback((index: number) => {
+    const gs = stateRef.current;
+    if (!chiOptions || index < 0 || index >= chiOptions.length) return;
+    const chosen = chiOptions[index];
+    const result = doChi(gs, 0, chosen);
+    setChiOptions(null);
+    setGameState(result);
+    setTurnPhase('human-needs-discard');
+    setMessage('Chi! Now discard a tile.');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chiOptions]);
 
   // ── AI turn loop ────────────────────────────────────────────────────
 
@@ -580,8 +602,8 @@ export function useGameEngine(humanName: string): GameEngine {
       }
     }
 
-    // Check chi (only next player after discarder in anti-clockwise order)
-    const chiPlayer = (discarderIdx + 3) % 4;
+    // Check chi (only next player after discarder in clockwise order)
+    const chiPlayer = (discarderIdx + 1) % 4;
     if (chiPlayer !== 0) {
       const player = gs.players[chiPlayer];
       const chiTiles = aiShouldChi(player, discard, discarderIdx, chiPlayer);
@@ -652,32 +674,42 @@ export function useGameEngine(humanName: string): GameEngine {
     const prevRoundNumber = prevGs.roundNumber;
     const prevRoundWind = prevGs.roundWind;
 
-    // Wind progression: rotate dealer (East moves to next player)
-    // After 4 rounds in a wind, advance to next wind
-    // East→South→West→North, then game ends after North round
+    // Check if the banker (East) won — if so, they stay banker (no rotation)
+    const eastPlayerIdx = prevGs.players.findIndex(p => p.seatWind === 'east');
+    const bankerWon = winner === eastPlayerIdx;
+
     const windOrder: SeatWind[] = ['east', 'south', 'west', 'north'];
-    let nextRoundNumber = prevRoundNumber + 1;
+    let nextRoundNumber = prevRoundNumber;
     let nextRoundWind = prevRoundWind;
+    let newSeatWinds: SeatWind[];
 
-    // Every 4 rounds, advance the round wind
-    if (nextRoundNumber > 4) {
-      const windIdx = windOrder.indexOf(prevRoundWind as SeatWind);
-      if (windIdx < 3) {
-        nextRoundWind = windOrder[windIdx + 1];
-        nextRoundNumber = 1;
-      } else {
-        // Game complete (after North round 4) — restart from East
-        nextRoundWind = 'east';
-        nextRoundNumber = 1;
+    if (bankerWon) {
+      // Banker stays: no seat rotation, no round advancement
+      newSeatWinds = prevGs.players.map(p => p.seatWind);
+    } else {
+      // Normal progression: rotate dealer, advance round
+      nextRoundNumber = prevRoundNumber + 1;
+
+      // Every 4 rounds, advance the round wind
+      if (nextRoundNumber > 4) {
+        const windIdx = windOrder.indexOf(prevRoundWind as SeatWind);
+        if (windIdx < 3) {
+          nextRoundWind = windOrder[windIdx + 1];
+          nextRoundNumber = 1;
+        } else {
+          // Game complete (after North round 4) — restart from East
+          nextRoundWind = 'east';
+          nextRoundNumber = 1;
+        }
       }
-    }
 
-    // Rotate seat winds: dealer shifts each round
-    const seatRotation: SeatWind[] = ['east', 'south', 'west', 'north'];
-    const newSeatWinds = prevGs.players.map((p) => {
-      const prevSeatIdx = seatRotation.indexOf(p.seatWind);
-      return seatRotation[(prevSeatIdx + 1) % 4];
-    });
+      // Rotate seat winds: dealer shifts each round
+      const seatRotation: SeatWind[] = ['east', 'south', 'west', 'north'];
+      newSeatWinds = prevGs.players.map((p) => {
+        const prevSeatIdx = seatRotation.indexOf(p.seatWind);
+        return seatRotation[(prevSeatIdx + 1) % 4];
+      });
+    }
 
     // Find who will be East (dealer) — they get 14 tiles and start
     const eastIdx = newSeatWinds.indexOf('east');
@@ -720,9 +752,10 @@ export function useGameEngine(humanName: string): GameEngine {
       }, AI_DELAY);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [winner]);
 
   return {
+    myIndex: 0,
     gameState,
     turnPhase,
     selectedTileId,
@@ -730,8 +763,10 @@ export function useGameEngine(humanName: string): GameEngine {
     message,
     taiResult,
     paymentResult,
+    chiOptions,
     selectTile,
     performAction,
+    selectChi,
     startNextRound,
   };
 }

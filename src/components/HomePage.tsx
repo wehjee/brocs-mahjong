@@ -5,9 +5,10 @@ import PixelBroccoli from './PixelBroccoli';
 interface HomePageProps {
   onCreateRoom: (playerName: string) => void;
   onJoinRoom: (playerName: string, roomCode: string) => void;
+  onPlaySolo: (playerName: string) => void;
 }
 
-export default function HomePage({ onCreateRoom, onJoinRoom }: HomePageProps) {
+export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomePageProps) {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [mode, setMode] = useState<'home' | 'join'>('home');
@@ -223,6 +224,38 @@ export default function HomePage({ onCreateRoom, onJoinRoom }: HomePageProps) {
               }}
             >
               Join Room
+            </motion.button>
+
+            <div style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              margin: '4px 0',
+            }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1 }}>OR</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+            </div>
+
+            <motion.button
+              whileHover={canCreate ? { scale: 1.02 } : undefined}
+              whileTap={canCreate ? { scale: 0.98 } : undefined}
+              onClick={() => canCreate && onPlaySolo(playerName.trim())}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 14,
+                color: canCreate ? 'var(--text-secondary)' : 'var(--text-muted)',
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily: "'DM Sans', sans-serif",
+                cursor: canCreate ? 'pointer' : 'not-allowed',
+              }}
+            >
+              🤖 Play Solo vs AI
             </motion.button>
           </div>
         ) : (

@@ -1,16 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import type { LobbyPlayer } from '../types/game';
+import PartySocket from 'partysocket';
+import type { ServerMessage, ClientMessage, ClientRoom } from '../types/messages';
 import PixelBroccoli from './PixelBroccoli';
 
 interface LobbyProps {
   roomCode: string;
-  players: LobbyPlayer[];
-  isHost: boolean;
+  playerName: string;
+  partyHost: string;
   onStartGame: () => void;
   onLeave: () => void;
-  onToggleReady: () => void;
-  currentPlayerId: string;
 }
 
 const SEAT_LABELS = ['東 East', '南 South', '西 West', '北 North'];
@@ -18,21 +17,105 @@ const SEAT_EMOJIS = ['🥦', '🍄', '🌽', '🥕'];
 
 export default function Lobby({
   roomCode,
-  players,
-  isHost,
+  playerName,
+  partyHost,
   onStartGame,
   onLeave,
-  onToggleReady,
-  currentPlayerId,
 }: LobbyProps) {
   const [copied, setCopied] = useState(false);
-  const allReady = players.length === 4 && players.every(p => p.isReady);
+  const [room, setRoom] = useState<ClientRoom | null>(null);
+  const [myId, setMyId] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const wsRef = useRef<PartySocket | null>(null);
+  const reconnectTokenRef = useRef<string>('');
+
+  // Get or create reconnect token
+  useEffect(() => {
+    const key = `brocs-mj-token-${roomCode}`;
+    let token = sessionStorage.getItem(key);
+    if (!token) {
+      token = crypto.randomUUID();
+      sessionStorage.setItem(key, token);
+    }
+    reconnectTokenRef.current = token;
+  }, [roomCode]);
+
+  // WebSocket connection
+  useEffect(() => {
+    const ws = new PartySocket({
+      host: partyHost,
+      room: roomCode,
+      query: {
+        name: playerName,
+        avatar: '🥦',
+        reconnectToken: reconnectTokenRef.current,
+      },
+    });
+
+    wsRef.current = ws;
+
+    ws.addEventListener('open', () => {
+      setIsConnected(true);
+      setMyId(ws.id);
+    });
+
+    ws.addEventListener('close', () => {
+      setIsConnected(false);
+    });
+
+    ws.addEventListener('message', (event) => {
+      const msg: ServerMessage = JSON.parse(event.data);
+      switch (msg.type) {
+        case 'room-state':
+          setRoom(msg.room);
+          break;
+        case 'game-start':
+          onStartGame();
+          break;
+        case 'error':
+          setErrorMsg(msg.message);
+          setTimeout(() => setErrorMsg(null), 4000);
+          break;
+      }
+    });
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyHost, roomCode, playerName]);
+
+  const send = (msg: ClientMessage) => {
+    wsRef.current?.send(JSON.stringify(msg));
+  };
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleLeave = () => {
+    send({ type: 'leave' });
+    onLeave();
+  };
+
+  const handleToggleReady = () => {
+    const me = room?.players.find(p => p.id === myId);
+    send({ type: 'ready', isReady: !(me?.isReady) });
+  };
+
+  const handleStart = () => {
+    send({ type: 'start-game' });
+  };
+
+  const players = room?.players ?? [];
+  const me = players.find(p => p.id === myId);
+  const isHost = me?.isHost ?? false;
+  const allReady = players.length >= 1 && players.every(p => p.isReady);
 
   return (
     <div style={{
@@ -104,6 +187,24 @@ export default function Lobby({
           alignItems: 'center',
           gap: 8,
         }}>
+          {/* Connection indicator */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 10,
+            color: isConnected ? 'var(--jade-400)' : 'var(--text-muted)',
+          }}>
+            <div style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: isConnected ? 'var(--jade-400)' : '#666',
+              boxShadow: isConnected ? '0 0 8px var(--jade-400)' : 'none',
+            }} />
+            {isConnected ? 'Connected' : 'Connecting...'}
+          </div>
+
           <div style={{
             fontFamily: "'Press Start 2P', cursive",
             fontSize: 10,
@@ -155,6 +256,26 @@ export default function Lobby({
           </span>
         </div>
 
+        {/* Error message */}
+        {errorMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              background: 'rgba(220, 38, 38, 0.15)',
+              border: '1px solid rgba(220, 38, 38, 0.3)',
+              borderRadius: 10,
+              color: '#ef4444',
+              fontSize: 13,
+              textAlign: 'center',
+            }}
+          >
+            {errorMsg}
+          </motion.div>
+        )}
+
         {/* Player seats */}
         <div style={{
           display: 'grid',
@@ -164,7 +285,7 @@ export default function Lobby({
         }}>
           {Array.from({ length: 4 }).map((_, i) => {
             const player = players[i];
-            const isMe = player?.id === currentPlayerId;
+            const isMe = player?.id === myId;
 
             return (
               <motion.div
@@ -283,7 +404,7 @@ export default function Lobby({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onLeave}
+            onClick={handleLeave}
             style={{
               flex: 1,
               padding: '14px 24px',
@@ -303,11 +424,11 @@ export default function Lobby({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onToggleReady}
+            onClick={handleToggleReady}
             style={{
               flex: 1,
               padding: '14px 24px',
-              background: players.find(p => p.id === currentPlayerId)?.isReady
+              background: me?.isReady
                 ? 'rgba(255,255,255,0.05)'
                 : 'linear-gradient(135deg, var(--jade-500), var(--jade-600))',
               border: '1px solid var(--border-subtle)',
@@ -319,14 +440,14 @@ export default function Lobby({
               cursor: 'pointer',
             }}
           >
-            {players.find(p => p.id === currentPlayerId)?.isReady ? 'Cancel Ready' : '✓ Ready Up'}
+            {me?.isReady ? 'Cancel Ready' : '✓ Ready Up'}
           </motion.button>
 
           {isHost && (
             <motion.button
               whileHover={allReady ? { scale: 1.02 } : undefined}
               whileTap={allReady ? { scale: 0.98 } : undefined}
-              onClick={allReady ? onStartGame : undefined}
+              onClick={allReady ? handleStart : undefined}
               style={{
                 flex: 1.5,
                 padding: '14px 24px',
@@ -346,6 +467,17 @@ export default function Lobby({
               {allReady ? '🀄 Start Game' : `Waiting (${players.length}/4)`}
             </motion.button>
           )}
+        </div>
+
+        {/* Info text */}
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+          opacity: 0.5,
+          lineHeight: 1.6,
+        }}>
+          AI will fill empty seats when the game starts
         </div>
       </motion.div>
     </div>

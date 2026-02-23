@@ -1,3 +1,4 @@
+import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
@@ -64,13 +65,14 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
     message,
     taiResult,
     paymentResult,
+    chiOptions,
     selectTile,
     performAction,
+    selectChi,
     startNextRound,
   } = engine;
 
-  const currentPlayerId = 'player-0';
-  const myIndex = gameState.players.findIndex(p => p.id === currentPlayerId);
+  const myIndex = engine.myIndex;
   const getRelativePlayer = (offset: number) =>
     gameState.players[(myIndex + offset) % 4];
 
@@ -83,9 +85,9 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
     selectTile(tile.id);
   };
 
-  const handleAction = (action: ActionType) => {
+  const handleAction = useCallback((action: ActionType) => {
     performAction(action);
-  };
+  }, [performAction]);
 
   // Only show buttons when the action is actually available
   const canWinSelfDraw = checkWin(me.hand, me.melds) && me.hand.length === 14 - me.melds.length * 3;
@@ -118,6 +120,33 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
         return [];
     }
   })();
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────
+  const HOTKEY_MAP: Record<string, ActionType> = {
+    'd': 'draw',
+    'x': 'discard',
+    'c': 'chi',
+    'p': 'pong',
+    'k': 'kong',
+    'w': 'win',
+    ' ': 'pass',
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Skip when typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      const action = HOTKEY_MAP[e.key.toLowerCase()];
+      if (action && availableActions.includes(action)) {
+        e.preventDefault();
+        handleAction(action);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [availableActions, handleAction]);
 
   const phaseLabel = (() => {
     switch (turnPhase) {
@@ -333,6 +362,93 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
           Turn {gameState.turnNumber}
         </span>
       </div>
+
+      {/* Chi selection overlay */}
+      <AnimatePresence>
+        {chiOptions && chiOptions.length > 1 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 90,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0,0,0,0.6)',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 16,
+                padding: '24px 32px',
+                background: 'linear-gradient(160deg, var(--bg-card), var(--bg-surface))',
+                borderRadius: 16,
+                border: '1px solid var(--border-subtle)',
+                boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+              }}
+            >
+              <div style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--amber-300)',
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+              }}>
+                Choose Chi Combination
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {chiOptions.map((combo, idx) => (
+                  <motion.button
+                    key={idx}
+                    whileHover={{ scale: 1.05, y: -2 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => selectChi(idx)}
+                    style={{
+                      display: 'flex',
+                      gap: 3,
+                      padding: '8px 12px',
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      transition: 'border-color 0.2s',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--amber-400)'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-subtle)'; }}
+                  >
+                    {combo.map((tile) => (
+                      <MahjongTile key={tile.id} tile={tile} faceUp size="medium" />
+                    ))}
+                    {/* Show the discard tile completing the sequence */}
+                    {gameState.lastDiscard && (
+                      <MahjongTile
+                        tile={gameState.lastDiscard}
+                        faceUp
+                        size="medium"
+                        highlighted
+                      />
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                Click a combination to complete your Chi
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Win overlay */}
       <AnimatePresence>
