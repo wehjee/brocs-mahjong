@@ -356,8 +356,8 @@ export function useGameEngine(humanName: string): GameEngine {
         }
       }
 
-      // Check chi (only next player after discarder)
-      const chiPlayer = (discarderIdx + 1) % 4;
+      // Check chi (only next player after discarder in anti-clockwise order)
+      const chiPlayer = (discarderIdx + 3) % 4;
       if (chiPlayer !== 0) { // Only AI chi
         const player = gs.players[chiPlayer];
         const chiTiles = aiShouldChi(player, discard, discarderIdx, chiPlayer);
@@ -580,8 +580,8 @@ export function useGameEngine(humanName: string): GameEngine {
       }
     }
 
-    // Check chi (only next player after discarder)
-    const chiPlayer = (discarderIdx + 1) % 4;
+    // Check chi (only next player after discarder in anti-clockwise order)
+    const chiPlayer = (discarderIdx + 3) % 4;
     if (chiPlayer !== 0) {
       const player = gs.players[chiPlayer];
       const chiTiles = aiShouldChi(player, discard, discarderIdx, chiPlayer);
@@ -672,11 +672,11 @@ export function useGameEngine(humanName: string): GameEngine {
       }
     }
 
-    // Rotate seat winds: each player shifts one position
+    // Rotate seat winds: dealer shifts anti-clockwise each round
     const seatRotation: SeatWind[] = ['east', 'south', 'west', 'north'];
     const newSeatWinds = prevGs.players.map((p) => {
       const prevSeatIdx = seatRotation.indexOf(p.seatWind);
-      return seatRotation[(prevSeatIdx + 1) % 4];
+      return seatRotation[(prevSeatIdx + 3) % 4];
     });
 
     // Find who will be East (dealer) — they get 14 tiles and start

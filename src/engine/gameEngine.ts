@@ -112,7 +112,8 @@ export function discardTile(state: GameState, playerIndex: number, tileId: strin
 }
 
 export function advanceTurn(state: GameState): GameState {
-  const next = (state.currentPlayerIndex + 1) % 4;
+  // Anti-clockwise turn order: 0 → 3 → 2 → 1 → 0
+  const next = (state.currentPlayerIndex + 3) % 4;
 
   const players = state.players.map((p, i) => ({
     ...p,
@@ -139,8 +140,9 @@ export function canKong(hand: Tile[], discardDef: TileDefinition): Tile[] | null
 }
 
 export function canChi(hand: Tile[], discardDef: TileDefinition, claimerIndex: number, discarderIndex: number): Tile[] | null {
-  // Chi can only be claimed from the player to your left (previous player)
-  if ((discarderIndex + 1) % 4 !== claimerIndex) return null;
+  // Chi can only be claimed from the player immediately before you in turn order
+  // Anti-clockwise: the previous player for claimerIndex is (claimerIndex + 1) % 4
+  if ((claimerIndex + 1) % 4 !== discarderIndex) return null;
   if (discardDef.type !== 'suit') return null;
 
   const suit = discardDef.suit;
