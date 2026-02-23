@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
@@ -132,28 +132,22 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   })();
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────
-  // Use refs to always access the latest values in the keydown handler
-  // without needing to teardown/re-register the listener on every render.
-  const availableActionsRef = useRef(availableActions);
-  availableActionsRef.current = availableActions;
-  const handleActionRef = useRef(handleAction);
-  handleActionRef.current = handleAction;
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Skip when typing in an input/textarea
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-      const action = HOTKEY_MAP[e.key.toLowerCase()];
-      if (action && availableActionsRef.current.includes(action)) {
+      const key = e.key.toLowerCase();
+      const action = HOTKEY_MAP[key];
+      if (action && availableActions.includes(action)) {
         e.preventDefault();
-        handleActionRef.current(action);
+        performAction(action);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  });
 
   const phaseLabel = (() => {
     switch (turnPhase) {
