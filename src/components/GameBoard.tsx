@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Tile, ActionType, Player } from '../types/game';
 import type { GameEngine } from '../engine/useGameEngine';
@@ -132,7 +132,6 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   })();
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────
-  const [debugKey, setDebugKey] = useState('');
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Skip when typing in an input/textarea
@@ -141,7 +140,6 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
 
       const key = e.key.toLowerCase();
       const action = HOTKEY_MAP[key];
-      setDebugKey(`key="${key}" action=${action || 'none'} avail=[${availableActions.join(',')}] match=${action ? availableActions.includes(action) : false}`);
       if (action && availableActions.includes(action)) {
         e.preventDefault();
         performAction(action);
@@ -365,18 +363,6 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
           Turn {gameState.turnNumber}
         </span>
       </div>
-
-      {/* DEBUG: Keyboard shortcut diagnostics — remove after fixing */}
-      {debugKey && (
-        <div style={{
-          position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)',
-          padding: '8px 16px', background: 'rgba(255,0,0,0.8)', color: '#fff',
-          borderRadius: 8, zIndex: 999, fontSize: 12, fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-        }}>
-          {debugKey}
-        </div>
-      )}
 
       {/* Chi selection overlay */}
       <AnimatePresence>
