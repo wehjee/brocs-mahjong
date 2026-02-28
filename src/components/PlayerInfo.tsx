@@ -5,14 +5,16 @@ interface PlayerInfoProps {
   player: Player;
   isCurrentTurn: boolean;
   position: 'bottom' | 'right' | 'top' | 'left';
+  compact?: boolean;
 }
 
 const WIND_LABELS: Record<SeatWind, string> = {
   east: '東', south: '南', west: '西', north: '北',
 };
 
-export default function PlayerInfo({ player, isCurrentTurn, position }: PlayerInfoProps) {
+export default function PlayerInfo({ player, isCurrentTurn, position, compact = false }: PlayerInfoProps) {
   const isVertical = position === 'left' || position === 'right';
+  const avatarSize = compact ? 28 : 36;
 
   return (
     <motion.div
@@ -25,20 +27,20 @@ export default function PlayerInfo({ player, isCurrentTurn, position }: PlayerIn
         display: 'flex',
         flexDirection: isVertical ? 'column' : 'row',
         alignItems: 'center',
-        gap: 8,
-        padding: '8px 12px',
+        gap: compact ? 4 : 8,
+        padding: compact ? '4px 8px' : '8px 12px',
         background: isCurrentTurn
           ? 'linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(251, 191, 36, 0.05))'
           : 'rgba(0,0,0,0.25)',
-        borderRadius: 10,
+        borderRadius: compact ? 8 : 10,
         backdropFilter: 'blur(8px)',
-        minWidth: isVertical ? 'auto' : 140,
+        minWidth: isVertical ? 'auto' : compact ? 100 : 140,
       }}
     >
       {/* Avatar */}
       <div style={{
-        width: 36,
-        height: 36,
+        width: avatarSize,
+        height: avatarSize,
         borderRadius: '50%',
         background: isCurrentTurn
           ? 'linear-gradient(135deg, var(--amber-500), var(--amber-300))'
@@ -46,7 +48,7 @@ export default function PlayerInfo({ player, isCurrentTurn, position }: PlayerIn
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 18,
+        fontSize: compact ? 14 : 18,
         flexShrink: 0,
         border: player.isConnected ? 'none' : '2px dashed rgba(255,255,255,0.3)',
         opacity: player.isConnected ? 1 : 0.5,
@@ -59,38 +61,40 @@ export default function PlayerInfo({ player, isCurrentTurn, position }: PlayerIn
         display: 'flex',
         flexDirection: 'column',
         alignItems: isVertical ? 'center' : 'flex-start',
-        gap: 2,
+        gap: compact ? 1 : 2,
         overflow: 'hidden',
       }}>
         <div style={{
-          fontSize: 12,
+          fontSize: compact ? 10 : 12,
           fontWeight: 600,
           color: 'var(--text-primary)',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          maxWidth: 80,
+          maxWidth: compact ? 50 : 80,
         }}>
           {player.name}
         </div>
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 4,
-          fontSize: 10,
+          gap: compact ? 2 : 4,
+          fontSize: compact ? 8 : 10,
           color: 'var(--text-secondary)',
         }}>
           <span style={{
             fontFamily: "'Noto Sans SC', sans-serif",
             fontWeight: 700,
-            fontSize: 12,
+            fontSize: compact ? 10 : 12,
             color: isCurrentTurn ? 'var(--amber-400)' : 'var(--text-muted)',
           }}>
             {WIND_LABELS[player.seatWind]}
           </span>
-          <span style={{ color: 'var(--text-muted)' }}>
-            {player.hand.length} tiles
-          </span>
+          {!compact && (
+            <span style={{ color: 'var(--text-muted)' }}>
+              {player.hand.length} tiles
+            </span>
+          )}
         </div>
       </div>
 
@@ -100,8 +104,8 @@ export default function PlayerInfo({ player, isCurrentTurn, position }: PlayerIn
           animate={{ scale: [1, 1.2, 1] }}
           transition={{ repeat: Infinity, duration: 1.5 }}
           style={{
-            width: 6,
-            height: 6,
+            width: compact ? 5 : 6,
+            height: compact ? 5 : 6,
             borderRadius: '50%',
             background: 'var(--amber-400)',
             flexShrink: 0,

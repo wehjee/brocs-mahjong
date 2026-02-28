@@ -11,6 +11,7 @@ export interface MultiplayerConfig {
   host: string;
   roomCode: string;
   playerName: string;
+  avatar: string;
 }
 
 // ── Extra multiplayer methods ────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function useMultiplayerEngine(config: MultiplayerConfig): GameEngine & Mu
       room: config.roomCode,
       query: {
         name: config.playerName,
-        avatar: '🥦',
+        avatar: config.avatar,
         reconnectToken: reconnectTokenRef.current,
       },
     });

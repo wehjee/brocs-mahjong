@@ -24,6 +24,7 @@ import {
   tileOrder,
   calculateTai,
   calculatePayments,
+  canWinWithSufficientTai,
 } from './gameEngine';
 import type { TaiResult, PaymentResult } from './gameEngine';
 
@@ -43,7 +44,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function createInitialState(humanName: string, dealerIndex = 0): GameState {
+function createInitialState(humanName: string, humanAvatar = '🥦', dealerIndex = 0): GameState {
   _tileId = 0;
   const defs = shuffle(generateTileSet());
 
@@ -86,7 +87,7 @@ function createInitialState(humanName: string, dealerIndex = 0): GameState {
 
   const winds: SeatWind[] = ['east', 'south', 'west', 'north'];
   const names = [humanName, 'BrocBot', 'TileKing', 'MahJane'];
-  const avatars = ['🥦', '🍄', '🌽', '🥕'];
+  const avatars = [humanAvatar, '🍄', '🌽', '🥕'];
 
   return {
     id: `game-${Date.now().toString(36)}`,
@@ -143,8 +144,8 @@ export interface GameEngine {
 
 const AI_DELAY = 800; // ms between AI actions
 
-export function useGameEngine(humanName: string): GameEngine {
-  const [gameState, setGameState] = useState<GameState>(() => createInitialState(humanName));
+export function useGameEngine(humanName: string, avatar = '🥦'): GameEngine {
+  const [gameState, setGameState] = useState<GameState>(() => createInitialState(humanName, avatar));
   // East starts with 14 tiles — go straight to discard phase
   const [turnPhase, setTurnPhase] = useState<TurnPhase>('human-needs-discard');
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
@@ -261,11 +262,22 @@ export function useGameEngine(humanName: string): GameEngine {
         if (turnPhase === 'human-needs-discard') {
           // Self-draw win
           if (checkWin(p.hand, p.melds)) {
+            const { allowed } = canWinWithSufficientTai(p, true, gs.roundWind);
+            if (!allowed) {
+              setMessage('Not enough tai to win! You need at least 1 tai.');
+              return;
+            }
             endRound(humanIdx, true);
           }
         } else if (turnPhase === 'claim-window' && gs.lastDiscard) {
           // Win off discard
           if (checkWinWithTile(p.hand, p.melds, gs.lastDiscard)) {
+            const testPlayer = { ...p, hand: [...p.hand, gs.lastDiscard] };
+            const { allowed } = canWinWithSufficientTai(testPlayer, false, gs.roundWind);
+            if (!allowed) {
+              setMessage('Not enough tai to win! You need at least 1 tai.');
+              return;
+            }
             // Add discard to hand first
             const newHand = [...p.hand, gs.lastDiscard];
             const discarderIdx = gs.lastDiscardPlayer!;
@@ -323,10 +335,13 @@ export function useGameEngine(humanName: string): GameEngine {
       const discarderIdx = gs.lastDiscardPlayer!;
 
       // Priority: Win > Kong > Pong > Chi (chi only for next player)
-      // Check all AIs for win first
+      // Check all AIs for win first — must have sufficient tai
       for (let i = 1; i <= 3; i++) {
         const player = gs.players[i];
         if (checkWinWithTile(player.hand, player.melds, discard)) {
+          const testPlayer = { ...player, hand: [...player.hand, discard] };
+          const { allowed } = canWinWithSufficientTai(testPlayer, false, gs.roundWind);
+          if (!allowed) continue; // Not enough tai, skip
           // AI wins off the discard
           const newHand = [...player.hand, discard];
           const updatedPlayers = gs.players.map((p, pi) => {
@@ -431,12 +446,15 @@ export function useGameEngine(humanName: string): GameEngine {
 
       const player = afterDraw.players[idx];
 
-      // Check if AI won (self-draw)
+      // Check if AI won (self-draw) — must have sufficient tai
       if (checkWin(player.hand, player.melds)) {
-        timerRef.current = setTimeout(() => {
-          endRound(idx, true);
-        }, AI_DELAY);
-        return;
+        const { allowed } = canWinWithSufficientTai(player, true, afterDraw.roundWind);
+        if (allowed) {
+          timerRef.current = setTimeout(() => {
+            endRound(idx, true);
+          }, AI_DELAY);
+          return;
+        }
       }
 
       // Check if AI can self-kong
@@ -549,11 +567,14 @@ export function useGameEngine(humanName: string): GameEngine {
     }
 
     // Priority: Win > Kong > Pong > Chi
-    // Check wins first
+    // Check wins first — must have sufficient tai
     for (let i = 1; i <= 3; i++) {
       if (i === discarderIdx) continue;
       const player = gs.players[i];
       if (checkWinWithTile(player.hand, player.melds, discard)) {
+        const testPlayer = { ...player, hand: [...player.hand, discard] };
+        const { allowed } = canWinWithSufficientTai(testPlayer, false, gs.roundWind);
+        if (!allowed) continue;
         const newHand = [...player.hand, discard];
         const updatedPlayers = gs.players.map((p, pi) => {
           if (pi === i) return { ...p, hand: newHand };
@@ -715,7 +736,7 @@ export function useGameEngine(humanName: string): GameEngine {
     const eastIdx = newSeatWinds.indexOf('east');
 
     // Create fresh game state with correct dealer
-    const newGs = createInitialState(prevGs.players[0].name, eastIdx);
+    const newGs = createInitialState(prevGs.players[0].name, prevGs.players[0].avatar, eastIdx);
 
     // Apply rotated seat winds and preserved scores
     const finalPlayers = newGs.players.map((p, i) => ({

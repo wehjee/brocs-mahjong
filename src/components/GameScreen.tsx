@@ -4,6 +4,7 @@ import GameBoard from './GameBoard';
 
 interface GameScreenProps {
   playerName: string;
+  avatar: string;
   gameMode: 'singleplayer' | 'multiplayer';
   roomCode: string;
   partyHost: string;
@@ -13,13 +14,14 @@ interface GameScreenProps {
 
 // Split into two components to avoid conditional hooks
 
-function SinglePlayerGame({ playerName, onPlayAgain }: { playerName: string; onPlayAgain: () => void }) {
-  const engine = useGameEngine(playerName || 'Player');
+function SinglePlayerGame({ playerName, avatar, onPlayAgain }: { playerName: string; avatar: string; onPlayAgain: () => void }) {
+  const engine = useGameEngine(playerName || 'Player', avatar);
   return <GameBoard engine={engine} onPlayAgain={onPlayAgain} />;
 }
 
-function MultiplayerGame({ playerName, roomCode, partyHost, onPlayAgain }: {
+function MultiplayerGame({ playerName, avatar, roomCode, partyHost, onPlayAgain }: {
   playerName: string;
+  avatar: string;
   roomCode: string;
   partyHost: string;
   onPlayAgain: () => void;
@@ -28,12 +30,14 @@ function MultiplayerGame({ playerName, roomCode, partyHost, onPlayAgain }: {
     host: partyHost,
     roomCode,
     playerName: playerName || 'Player',
+    avatar,
   });
   return <GameBoard engine={engine} onPlayAgain={onPlayAgain} />;
 }
 
 export default function GameScreen({
   playerName,
+  avatar,
   gameMode,
   roomCode,
   partyHost,
@@ -46,6 +50,7 @@ export default function GameScreen({
     return (
       <MultiplayerGame
         playerName={playerName}
+        avatar={avatar}
         roomCode={roomCode}
         partyHost={partyHost}
         onPlayAgain={onPlayAgain}
@@ -56,6 +61,7 @@ export default function GameScreen({
   return (
     <SinglePlayerGame
       playerName={playerName}
+      avatar={avatar}
       onPlayAgain={onPlayAgain}
     />
   );

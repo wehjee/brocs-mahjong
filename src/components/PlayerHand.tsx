@@ -8,6 +8,7 @@ interface PlayerHandProps {
   interactive: boolean;       // allows clicking/selecting tiles
   selectedTileId: string | null;
   onTileClick?: (tile: Tile) => void;
+  tileSize?: 'tiny' | 'small' | 'medium' | 'large';
 }
 
 export default function PlayerHand({
@@ -17,6 +18,7 @@ export default function PlayerHand({
   interactive,
   selectedTileId,
   onTileClick,
+  tileSize = 'medium',
 }: PlayerHandProps) {
   return (
     <div style={{
@@ -29,7 +31,7 @@ export default function PlayerHand({
         <div key={`meld-${meldIdx}`} style={{
           display: 'flex',
           gap: 1,
-          marginRight: 8,
+          marginRight: tileSize === 'small' ? 4 : 8,
           padding: '2px 4px',
           background: 'rgba(0,0,0,0.15)',
           borderRadius: 4,
@@ -39,7 +41,7 @@ export default function PlayerHand({
               key={tile.id}
               tile={tile}
               faceUp
-              size="medium"
+              size={tileSize}
               index={i}
             />
           ))}
@@ -57,7 +59,7 @@ export default function PlayerHand({
             key={tile.id}
             tile={tile}
             faceUp={isCurrentPlayer}
-            size="medium"
+            size={tileSize}
             interactive={interactive}
             selected={selectedTileId === tile.id}
             onClick={() => interactive && onTileClick?.(tile)}

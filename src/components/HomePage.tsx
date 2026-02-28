@@ -2,15 +2,18 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import PixelBroccoli from './PixelBroccoli';
 
+const AVATAR_OPTIONS = ['🥦', '🍄', '🌽', '🥕', '🐉', '🀄', '🎋', '🌸', '🔥', '🐱', '🦊', '🎲'];
+
 interface HomePageProps {
-  onCreateRoom: (playerName: string) => void;
-  onJoinRoom: (playerName: string, roomCode: string) => void;
-  onPlaySolo: (playerName: string) => void;
+  onCreateRoom: (playerName: string, avatar: string) => void;
+  onJoinRoom: (playerName: string, roomCode: string, avatar: string) => void;
+  onPlaySolo: (playerName: string, avatar: string) => void;
 }
 
 export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomePageProps) {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState('🥦');
   const [mode, setMode] = useState<'home' | 'join'>('home');
 
   const canCreate = playerName.trim().length > 0;
@@ -175,6 +178,57 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
           />
         </div>
 
+        {/* Avatar picker */}
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}>
+          <label style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            letterSpacing: 1,
+            textTransform: 'uppercase',
+            fontWeight: 600,
+          }}>
+            Avatar
+          </label>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}>
+            {AVATAR_OPTIONS.map(emoji => (
+              <motion.button
+                key={emoji}
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setSelectedAvatar(emoji)}
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 10,
+                  border: selectedAvatar === emoji
+                    ? '2px solid var(--amber-400)'
+                    : '1px solid var(--border-subtle)',
+                  background: selectedAvatar === emoji
+                    ? 'rgba(251, 191, 36, 0.1)'
+                    : 'rgba(0,0,0,0.2)',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'border-color 0.2s, background 0.2s',
+                }}
+              >
+                {emoji}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
         {/* Action buttons */}
         {mode === 'home' ? (
           <div style={{
@@ -186,7 +240,7 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
             <motion.button
               whileHover={canCreate ? { scale: 1.02 } : undefined}
               whileTap={canCreate ? { scale: 0.98 } : undefined}
-              onClick={() => canCreate && onCreateRoom(playerName.trim())}
+              onClick={() => canCreate && onCreateRoom(playerName.trim(), selectedAvatar)}
               style={{
                 width: '100%',
                 padding: '16px 24px',
@@ -241,7 +295,7 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
             <motion.button
               whileHover={canCreate ? { scale: 1.02 } : undefined}
               whileTap={canCreate ? { scale: 0.98 } : undefined}
-              onClick={() => canCreate && onPlaySolo(playerName.trim())}
+              onClick={() => canCreate && onPlaySolo(playerName.trim(), selectedAvatar)}
               style={{
                 width: '100%',
                 padding: '14px 24px',
@@ -333,7 +387,7 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
               <motion.button
                 whileHover={canJoin ? { scale: 1.02 } : undefined}
                 whileTap={canJoin ? { scale: 0.98 } : undefined}
-                onClick={() => canJoin && onJoinRoom(playerName.trim(), roomCode.trim())}
+                onClick={() => canJoin && onJoinRoom(playerName.trim(), roomCode.trim(), selectedAvatar)}
                 style={{
                   flex: 2,
                   padding: '14px 24px',

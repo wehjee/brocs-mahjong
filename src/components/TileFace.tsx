@@ -2,7 +2,7 @@ import type { TileDefinition } from '../types/game';
 
 interface TileFaceProps {
   definition: TileDefinition;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'tiny' | 'small' | 'medium' | 'large';
 }
 
 // Chinese characters for the tile faces
@@ -26,6 +26,7 @@ const ANIMAL_NAMES = ['🐱', '🐭', '🐓', '🐛'];
 const ANIMAL_LABELS = ['Cat', 'Mouse', 'Rooster', 'Centipede'];
 
 const sizeMap = {
+  tiny: { fontSize: 8, subSize: 5, width: 24, height: 32 },
   small: { fontSize: 10, subSize: 7, width: 32, height: 44 },
   medium: { fontSize: 14, subSize: 9, width: 44, height: 60 },
   large: { fontSize: 18, subSize: 12, width: 56, height: 76 },

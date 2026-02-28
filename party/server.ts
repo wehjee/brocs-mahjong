@@ -9,6 +9,7 @@ import {
   doPong, doChi, doKong, doSelfKong,
   aiChooseDiscard, aiShouldPong, aiShouldKong, aiShouldChi, aiShouldSelfKong,
   calculateTai, calculatePayments, tileOrder,
+  canWinWithSufficientTai,
 } from '../src/engine/gameEngine';
 import type { TaiResult, PaymentResult } from '../src/engine/gameEngine';
 
@@ -27,7 +28,7 @@ const AI_DELAY = 800;
 const CLAIM_TIMEOUT = 15000; // 15 seconds for human claims
 const DISCONNECT_GRACE = 60000; // 60 seconds before replacing with AI
 
-const AVATARS = ['🥦', '🍄', '🌽', '🥕'];
+const AI_AVATARS = ['🍄', '🌽', '🥕', '🎲'];
 const AI_NAMES = ['BrocBot', 'TileKing', 'MahJane'];
 
 // ── Server ───────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export default class MahjongRoom implements Party.Server {
     const player: LobbyPlayer = {
       connectionId: connection.id,
       name,
-      avatar: AVATARS[this.lobbyPlayers.length] || avatar,
+      avatar,
       isReady: false,
       isHost,
       reconnectToken: reconnectToken || crypto.randomUUID(),
@@ -225,7 +226,7 @@ export default class MahjongRoom implements Party.Server {
       this.lobbyPlayers.push({
         connectionId: `ai-${this.lobbyPlayers.length}`,
         name: AI_NAMES[aiNameIdx++] || `Bot${aiNameIdx}`,
-        avatar: AVATARS[this.lobbyPlayers.length],
+        avatar: AI_AVATARS[aiNameIdx] || '🤖',
         isReady: true,
         isHost: false,
         reconnectToken: '',
@@ -516,6 +517,12 @@ export default class MahjongRoom implements Party.Server {
     if (gs.currentPlayerIndex === playerIdx && !gs.lastDiscard) {
       const p = gs.players[playerIdx];
       if (checkWin(p.hand, p.melds)) {
+        const { allowed } = canWinWithSufficientTai(p, true, gs.roundWind);
+        if (!allowed) {
+          const conn = this.getConnectionForPlayer(playerIdx);
+          if (conn) this.sendTo(conn, { type: 'error', message: 'Not enough tai to win!' });
+          return;
+        }
         this.endRound(playerIdx, true);
         return;
       }
@@ -606,8 +613,12 @@ export default class MahjongRoom implements Party.Server {
 
     // Priority: Win > Kong > Pong > Chi
     if (checkWinWithTile(player.hand, player.melds, discard)) {
-      this.claimResponses.set(aiIdx, { action: 'win' });
-      return;
+      const testPlayer = { ...player, hand: [...player.hand, discard] };
+      const { allowed } = canWinWithSufficientTai(testPlayer, false, gs.roundWind);
+      if (allowed) {
+        this.claimResponses.set(aiIdx, { action: 'win' });
+        return;
+      }
     }
     if (aiShouldKong(player, discard)) {
       this.claimResponses.set(aiIdx, { action: 'kong' });
@@ -651,11 +662,18 @@ export default class MahjongRoom implements Party.Server {
     const discard = gs.lastDiscard!;
 
     // Resolve by priority: Win > Kong > Pong > Chi
-    // Win
+    // Win — must have sufficient tai
     for (let i = 0; i < 4; i++) {
       if (i === discarderIdx) continue;
       const resp = this.claimResponses.get(i);
       if (resp?.action === 'win') {
+        const testPlayer = { ...gs.players[i], hand: [...gs.players[i].hand, discard] };
+        const { allowed } = canWinWithSufficientTai(testPlayer, false, gs.roundWind);
+        if (!allowed) {
+          const conn = this.getConnectionForPlayer(i);
+          if (conn) this.sendTo(conn, { type: 'error', message: 'Not enough tai to win!' });
+          continue; // Skip to next player
+        }
         // Execute win
         const newHand = [...gs.players[i].hand, discard];
         const updatedPlayers = gs.players.map((p, pi) => {
@@ -782,8 +800,11 @@ export default class MahjongRoom implements Party.Server {
 
     // Check self-draw win
     if (checkWin(player.hand, player.melds)) {
-      this.scheduleAi(() => this.endRound(idx, true));
-      return;
+      const { allowed } = canWinWithSufficientTai(player, true, afterDraw.roundWind);
+      if (allowed) {
+        this.scheduleAi(() => this.endRound(idx, true));
+        return;
+      }
     }
 
     // Check self-kong
@@ -796,15 +817,19 @@ export default class MahjongRoom implements Party.Server {
           const fakeDiscard: Tile = { id: 'rob-kong', definition: kongInfo.tile.definition, faceUp: true };
           if (checkWinWithTile(afterDraw.players[j].hand, afterDraw.players[j].melds, fakeDiscard)) {
             if (this.aiPlayerIndices.has(j)) {
-              // AI robs the kong
+              // AI robs the kong — check tai first
               const newHand = [...afterDraw.players[j].hand, kongInfo.tile];
-              const updatedPlayers = afterDraw.players.map((p, pi) => {
-                if (pi === j) return { ...p, hand: newHand };
-                return p;
-              });
-              this.gameState = { ...afterDraw, players: updatedPlayers };
-              this.scheduleAi(() => this.endRound(j, false));
-              return;
+              const testPlayer = { ...afterDraw.players[j], hand: newHand };
+              const { allowed } = canWinWithSufficientTai(testPlayer, false, afterDraw.roundWind);
+              if (allowed) {
+                const updatedPlayers = afterDraw.players.map((p, pi) => {
+                  if (pi === j) return { ...p, hand: newHand };
+                  return p;
+                });
+                this.gameState = { ...afterDraw, players: updatedPlayers };
+                this.scheduleAi(() => this.endRound(j, false));
+                return;
+              }
             } else {
               // Human can rob — open claim window
               this.gameState = {
@@ -826,8 +851,11 @@ export default class MahjongRoom implements Party.Server {
         this.broadcastGameState();
         const pAfterKong = afterKong.players[idx];
         if (checkWin(pAfterKong.hand, pAfterKong.melds)) {
-          this.scheduleAi(() => this.endRound(idx, true));
-          return;
+          const { allowed } = canWinWithSufficientTai(pAfterKong, true, afterKong.roundWind);
+          if (allowed) {
+            this.scheduleAi(() => this.endRound(idx, true));
+            return;
+          }
         }
         this.scheduleAi(() => this.runAiDiscard(idx));
         return;

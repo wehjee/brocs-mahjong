@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { Player } from '../types/game';
 import type { TaiResult, PaymentResult } from '../engine/gameEngine';
+import { useBreakpoint } from '../hooks/useResponsive';
 import PixelBroccoli from './PixelBroccoli';
 import MahjongTile from './MahjongTile';
 
@@ -18,6 +19,10 @@ interface WinScreenProps {
 const WIND_LABELS: Record<string, string> = { east: 'East', south: 'South', west: 'West', north: 'North' };
 
 export default function WinScreen({ winner, message, taiResult, paymentResult, players, roundInfo, onNextRound, onPlayAgain }: WinScreenProps) {
+  const bp = useBreakpoint();
+  const isMobile = bp === 'mobile';
+  const tileSize: 'tiny' | 'small' = isMobile ? 'tiny' : 'small';
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -43,13 +48,13 @@ export default function WinScreen({ winner, message, taiResult, paymentResult, p
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 20,
-          padding: '36px 48px',
+          gap: isMobile ? 14 : 20,
+          padding: isMobile ? '20px 16px' : '36px 48px',
           background: 'linear-gradient(160deg, var(--bg-card), var(--bg-surface))',
-          borderRadius: 20,
+          borderRadius: isMobile ? 14 : 20,
           border: '1px solid var(--border-subtle)',
           boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-          maxWidth: 540,
+          maxWidth: isMobile ? '92vw' : 540,
           maxHeight: '85vh',
           overflowY: 'auto',
         }}
@@ -100,7 +105,7 @@ export default function WinScreen({ winner, message, taiResult, paymentResult, p
                     borderRadius: 6,
                   }}>
                     {meld.tiles.map((tile) => (
-                      <MahjongTile key={tile.id} tile={tile} faceUp size="small" />
+                      <MahjongTile key={tile.id} tile={tile} faceUp size={tileSize} />
                     ))}
                   </div>
                 ))}
@@ -110,7 +115,7 @@ export default function WinScreen({ winner, message, taiResult, paymentResult, p
             {/* Hand tiles */}
             <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
               {winner.hand.map((tile) => (
-                <MahjongTile key={tile.id} tile={tile} faceUp size="small" />
+                <MahjongTile key={tile.id} tile={tile} faceUp size={tileSize} />
               ))}
             </div>
 
@@ -120,7 +125,7 @@ export default function WinScreen({ winner, message, taiResult, paymentResult, p
                 <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Bonus tiles:</div>
                 <div style={{ display: 'flex', gap: 2 }}>
                   {winner.revealedBonuses.map((tile) => (
-                    <MahjongTile key={tile.id} tile={tile} faceUp size="small" />
+                    <MahjongTile key={tile.id} tile={tile} faceUp size={tileSize} />
                   ))}
                 </div>
               </div>

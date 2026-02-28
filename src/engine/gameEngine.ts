@@ -618,6 +618,24 @@ export function calculateTai(
     breakdown.push({ name: 'Rooster & Centipede', tai: 1 });
   }
 
+  // Seat-matching flower/animal bonus: Flower/Animal N matches seat wind N
+  // Flower 1 = East, Flower 2 = South, Flower 3 = West, Flower 4 = North
+  const seatWindValue = { east: 1, south: 2, west: 3, north: 4 }[player.seatWind];
+  if (seatWindValue) {
+    for (const flower of flowers) {
+      if (flower.definition.type === 'bonus' && flower.definition.value === seatWindValue) {
+        breakdown.push({ name: `Matching Flower (${player.seatWind})`, tai: 1 });
+        break;
+      }
+    }
+    for (const animal of animals) {
+      if (animal.definition.type === 'bonus' && animal.definition.value === seatWindValue) {
+        breakdown.push({ name: `Matching Animal (${player.seatWind})`, tai: 1 });
+        break;
+      }
+    }
+  }
+
   // ─ Hand-based scoring ─
   const allTiles = [...hand, ...melds.flatMap(m => m.tiles)];
   const allDefs = allTiles.map(t => t.definition);
@@ -741,6 +759,18 @@ export function calculateTai(
   const basePoints = Math.pow(2, finalTai);
 
   return { tai: finalTai, breakdown, basePoints };
+}
+
+// Check if a player has enough tai to win (before the Math.max floor)
+export function canWinWithSufficientTai(
+  player: Player,
+  isSelfDraw: boolean,
+  roundWind: string,
+  minTai: number = 1,
+): { allowed: boolean; taiResult: TaiResult } {
+  const result = calculateTai(player, isSelfDraw, roundWind);
+  const rawTai = result.breakdown.reduce((sum, b) => sum + b.tai, 0);
+  return { allowed: rawTai >= minTai, taiResult: result };
 }
 
 // ── Payment calculation (Singapore style) ────────────────────────────────

@@ -6,7 +6,7 @@ import PixelBroccoli from './PixelBroccoli';
 interface MahjongTileProps {
   tile: Tile;
   faceUp?: boolean;
-  size?: 'small' | 'medium' | 'large';
+  size?: 'tiny' | 'small' | 'medium' | 'large';
   interactive?: boolean;
   selected?: boolean;
   highlighted?: boolean;
@@ -16,6 +16,7 @@ interface MahjongTileProps {
 }
 
 const sizeMap = {
+  tiny: { width: 24, height: 32, brocSize: 14 },
   small: { width: 32, height: 44, brocSize: 18 },
   medium: { width: 44, height: 60, brocSize: 26 },
   large: { width: 56, height: 76, brocSize: 34 },

@@ -11,21 +11,24 @@ const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || 'localhost:1999';
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerName, setPlayerName] = useState('');
+  const [avatar, setAvatar] = useState('🥦');
   const [roomCode, setRoomCode] = useState('');
   const [gameMode, setGameMode] = useState<GameMode>('singleplayer');
   const [gameKey, setGameKey] = useState(0);
 
   // ── Play Solo (skip lobby, go straight to game with AI) ──────────
-  const handlePlaySolo = useCallback((name: string) => {
+  const handlePlaySolo = useCallback((name: string, av: string) => {
     setPlayerName(name);
+    setAvatar(av);
     setGameMode('singleplayer');
     setGameKey(k => k + 1);
     setScreen('game');
   }, []);
 
   // ── Create multiplayer room ──────────────────────────────────────
-  const handleCreateRoom = useCallback((name: string) => {
+  const handleCreateRoom = useCallback((name: string, av: string) => {
     setPlayerName(name);
+    setAvatar(av);
     const code = generateRoomCode();
     setRoomCode(code);
     setGameMode('multiplayer');
@@ -33,8 +36,9 @@ function App() {
   }, []);
 
   // ── Join existing multiplayer room ───────────────────────────────
-  const handleJoinRoom = useCallback((name: string, code: string) => {
+  const handleJoinRoom = useCallback((name: string, code: string, av: string) => {
     setPlayerName(name);
+    setAvatar(av);
     setRoomCode(code);
     setGameMode('multiplayer');
     setScreen('lobby');
@@ -74,6 +78,7 @@ function App() {
           <Lobby
             roomCode={roomCode}
             playerName={playerName}
+            avatar={avatar}
             partyHost={PARTYKIT_HOST}
             onStartGame={handleStartGame}
             onLeave={handleLeave}
@@ -84,6 +89,7 @@ function App() {
           <GameScreen
             key={gameKey}
             playerName={playerName}
+            avatar={avatar}
             gameMode={gameMode}
             roomCode={roomCode}
             partyHost={PARTYKIT_HOST}

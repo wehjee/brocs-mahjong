@@ -7,17 +7,18 @@ import PixelBroccoli from './PixelBroccoli';
 interface LobbyProps {
   roomCode: string;
   playerName: string;
+  avatar: string;
   partyHost: string;
   onStartGame: () => void;
   onLeave: () => void;
 }
 
 const SEAT_LABELS = ['東 East', '南 South', '西 West', '北 North'];
-const SEAT_EMOJIS = ['🥦', '🍄', '🌽', '🥕'];
 
 export default function Lobby({
   roomCode,
   playerName,
+  avatar,
   partyHost,
   onStartGame,
   onLeave,
@@ -49,7 +50,7 @@ export default function Lobby({
       room: roomCode,
       query: {
         name: playerName,
-        avatar: '🥦',
+        avatar,
         reconnectToken: reconnectTokenRef.current,
       },
     });
@@ -326,7 +327,7 @@ export default function Lobby({
                   fontSize: player ? 22 : 16,
                   flexShrink: 0,
                 }}>
-                  {player ? SEAT_EMOJIS[i] : '?'}
+                  {player ? player.avatar : '?'}
                 </div>
 
                 <div style={{

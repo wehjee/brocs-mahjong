@@ -5,6 +5,7 @@ interface ActionBarProps {
   actions: ActionType[];
   onAction: (action: ActionType) => void;
   tilesRemaining: number;
+  compact?: boolean;
 }
 
 const ACTION_CONFIG: Record<ActionType, { label: string; icon: string; color: string; hotkey: string }> = {
@@ -21,6 +22,7 @@ export default function ActionBar({
   actions,
   onAction,
   tilesRemaining,
+  compact = false,
 }: ActionBarProps) {
   return (
     <motion.div
@@ -29,11 +31,11 @@ export default function ActionBar({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '10px 20px',
+        gap: compact ? 6 : 12,
+        padding: compact ? '6px 10px' : '10px 20px',
         background: 'rgba(0,0,0,0.4)',
         backdropFilter: 'blur(12px)',
-        borderRadius: 14,
+        borderRadius: compact ? 10 : 14,
         border: '1px solid var(--border-subtle)',
       }}
     >
@@ -43,24 +45,24 @@ export default function ActionBar({
         flexDirection: 'column',
         alignItems: 'center',
         gap: 2,
-        paddingRight: 12,
+        paddingRight: compact ? 6 : 12,
         borderRight: '1px solid var(--border-subtle)',
-        minWidth: 50,
+        minWidth: compact ? 36 : 50,
       }}>
         <span style={{
           fontFamily: "'Press Start 2P', cursive",
-          fontSize: 14,
+          fontSize: compact ? 10 : 14,
           color: 'var(--amber-400)',
         }}>
           {tilesRemaining}
         </span>
-        <span style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: 1 }}>
+        <span style={{ fontSize: compact ? 7 : 9, color: 'var(--text-muted)', letterSpacing: 1 }}>
           WALL
         </span>
       </div>
 
       {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: compact ? 4 : 6 }}>
         {actions.map((action) => {
           const config = ACTION_CONFIG[action];
           return (
@@ -72,31 +74,36 @@ export default function ActionBar({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '8px 14px',
+                gap: compact ? 3 : 6,
+                padding: compact ? '6px 8px' : '8px 14px',
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: compact ? 6 : 8,
                 background: `linear-gradient(135deg, ${config.color}, ${config.color}cc)`,
                 color: 'white',
-                fontSize: 12,
+                fontSize: compact ? 10 : 12,
                 fontWeight: 600,
                 fontFamily: "'DM Sans', sans-serif",
                 cursor: 'pointer',
                 boxShadow: `0 2px 8px ${config.color}40`,
                 transition: 'all 0.2s ease',
+                minHeight: compact ? 36 : 'auto',
+                minWidth: compact ? 36 : 'auto',
+                justifyContent: 'center',
               }}
             >
               <span>{config.icon}</span>
-              <span>{config.label}</span>
-              <span style={{
-                fontSize: 9,
-                opacity: 0.7,
-                padding: '1px 4px',
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: 3,
-              }}>
-                {config.hotkey}
-              </span>
+              {!compact && <span>{config.label}</span>}
+              {!compact && (
+                <span style={{
+                  fontSize: 9,
+                  opacity: 0.7,
+                  padding: '1px 4px',
+                  background: 'rgba(255,255,255,0.15)',
+                  borderRadius: 3,
+                }}>
+                  {config.hotkey}
+                </span>
+              )}
             </motion.button>
           );
         })}
