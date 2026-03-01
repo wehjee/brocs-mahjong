@@ -211,43 +211,46 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
             {/* Popover */}
             <AnimatePresence>
               {avatarOpen && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9, y: -8 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: -8 }}
-                  transition={{ duration: 0.15, ease: 'easeOut' }}
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: 6,
-                    padding: 10,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 14,
-                    boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
-                    backdropFilter: 'blur(16px)',
-                    zIndex: 50,
-                    width: 200,
-                  }}
-                >
-                  {/* Arrow indicator */}
-                  <div style={{
-                    position: 'absolute',
-                    top: -5,
-                    left: '50%',
-                    transform: 'translateX(-50%) rotate(45deg)',
-                    width: 10,
-                    height: 10,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRight: 'none',
-                    borderBottom: 'none',
-                    zIndex: -1,
-                  }} />
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 50,
+                }}>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -8 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 6,
+                      padding: 10,
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 14,
+                      boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+                      backdropFilter: 'blur(16px)',
+                      width: 200,
+                      position: 'relative',
+                    }}
+                  >
+                    {/* Arrow indicator */}
+                    <div style={{
+                      position: 'absolute',
+                      top: -5,
+                      left: '50%',
+                      transform: 'translateX(-50%) rotate(45deg)',
+                      width: 10,
+                      height: 10,
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRight: 'none',
+                      borderBottom: 'none',
+                      zIndex: -1,
+                    }} />
                   {AVATAR_OPTIONS.map(emoji => (
                     <motion.button
                       key={emoji}
@@ -278,7 +281,8 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
                       {emoji}
                     </motion.button>
                   ))}
-                </motion.div>
+                  </motion.div>
+                </div>
               )}
             </AnimatePresence>
           </div>
