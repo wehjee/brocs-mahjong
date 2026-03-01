@@ -10,6 +10,7 @@ import PlayerInfo from './PlayerInfo';
 import ActionBar from './ActionBar';
 import MahjongTile from './MahjongTile';
 import WinScreen from './WinScreen';
+import ScoringReference from './ScoringReference';
 
 interface GameBoardProps {
   engine: GameEngine;
@@ -121,6 +122,9 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
   const across = getRelativePlayer(2);     // top
   const left = getRelativePlayer(3);       // left
 
+  // ── Scoring reference overlay ───────────────────────────────────
+  const [showHelp, setShowHelp] = useState(false);
+
   // ── Claim announcement overlay ──────────────────────────────────
   const [announcement, setAnnouncement] = useState<{ text: string; color: string } | null>(null);
   const prevMessageRef = useRef(message);
@@ -187,6 +191,13 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
       // Skip when typing in an input/textarea
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      // Toggle scoring reference with ?
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowHelp((prev) => !prev);
+        return;
+      }
 
       const key = e.key.toLowerCase();
       const action = HOTKEY_MAP[key];
@@ -447,6 +458,40 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           Turn {gameState.turnNumber}
         </span>
+        <div style={{ width: 1, height: 14, background: 'var(--border-subtle)' }} />
+        <button
+          onClick={() => setShowHelp(true)}
+          title="Scoring Reference (?)"
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            border: '1px solid var(--border-subtle)',
+            background: 'rgba(255,255,255,0.05)',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            padding: 0,
+            transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(251, 191, 36, 0.15)';
+            e.currentTarget.style.color = 'var(--amber-400)';
+            e.currentTarget.style.borderColor = 'rgba(251, 191, 36, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+          }}
+        >
+          ?
+        </button>
       </div>
 
       {/* Chi selection overlay */}
@@ -563,6 +608,9 @@ export default function GameBoard({ engine, onPlayAgain }: GameBoardProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Scoring reference overlay */}
+      <ScoringReference isOpen={showHelp} onClose={() => setShowHelp(false)} />
 
       {/* Win overlay */}
       <AnimatePresence>
