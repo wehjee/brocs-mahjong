@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import PixelBroccoli from './PixelBroccoli';
 
 const AVATAR_OPTIONS = ['🥦', '🍄', '🌽', '🥕', '🐉', '🀄', '🎋', '🌸', '🔥', '🐱', '🦊', '🎲'];
@@ -14,10 +14,24 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('🥦');
+  const [avatarOpen, setAvatarOpen] = useState(false);
   const [mode, setMode] = useState<'home' | 'join'>('home');
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const canCreate = playerName.trim().length > 0;
   const canJoin = playerName.trim().length > 0 && roomCode.trim().length === 4;
+
+  // Close popover on outside click
+  useEffect(() => {
+    if (!avatarOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setAvatarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [avatarOpen]);
 
   return (
     <div style={{
@@ -139,93 +153,160 @@ export default function HomePage({ onCreateRoom, onJoinRoom, onPlaySolo }: HomeP
           </div>
         </motion.div>
 
-        {/* Name input */}
+        {/* Identity row: Avatar + Name input */}
         <div style={{
           width: '100%',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
+          gap: 12,
+          alignItems: 'stretch',
+          position: 'relative',
         }}>
-          <label style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            fontWeight: 600,
-          }}>
-            Your Name
-          </label>
-          <input
-            type="text"
-            value={playerName}
-            onChange={e => setPlayerName(e.target.value)}
-            placeholder="Enter your name..."
-            maxLength={16}
-            style={{
-              width: '100%',
-              padding: '14px 16px',
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 12,
-              color: 'var(--text-primary)',
-              fontSize: 16,
-              fontFamily: "'DM Sans', sans-serif",
-              outline: 'none',
-              transition: 'border-color 0.2s',
-            }}
-            onFocus={e => e.target.style.borderColor = 'var(--jade-500)'}
-            onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
-          />
-        </div>
+          {/* Avatar picker button */}
+          <div ref={popoverRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setAvatarOpen(prev => !prev)}
+              style={{
+                width: 52,
+                height: '100%',
+                minHeight: 52,
+                borderRadius: 14,
+                border: avatarOpen
+                  ? '2px solid var(--amber-400)'
+                  : '1px solid var(--border-subtle)',
+                background: avatarOpen
+                  ? 'rgba(251, 191, 36, 0.1)'
+                  : 'rgba(0,0,0,0.3)',
+                fontSize: 26,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+            >
+              {selectedAvatar}
+              {/* Tiny edit hint */}
+              <div style={{
+                position: 'absolute',
+                bottom: 3,
+                right: 3,
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 7,
+                color: 'rgba(255,255,255,0.6)',
+              }}>
+                ✎
+              </div>
+            </motion.button>
 
-        {/* Avatar picker */}
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
-        }}>
-          <label style={{
-            fontSize: 11,
-            color: 'var(--text-muted)',
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            fontWeight: 600,
-          }}>
-            Avatar
-          </label>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}>
-            {AVATAR_OPTIONS.map(emoji => (
-              <motion.button
-                key={emoji}
-                whileHover={{ scale: 1.15 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setSelectedAvatar(emoji)}
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 10,
-                  border: selectedAvatar === emoji
-                    ? '2px solid var(--amber-400)'
-                    : '1px solid var(--border-subtle)',
-                  background: selectedAvatar === emoji
-                    ? 'rgba(251, 191, 36, 0.1)'
-                    : 'rgba(0,0,0,0.2)',
-                  fontSize: 20,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'border-color 0.2s, background 0.2s',
-                }}
-              >
-                {emoji}
-              </motion.button>
-            ))}
+            {/* Popover */}
+            <AnimatePresence>
+              {avatarOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: -8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: -8 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 6,
+                    padding: 10,
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 14,
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+                    backdropFilter: 'blur(16px)',
+                    zIndex: 50,
+                    width: 200,
+                  }}
+                >
+                  {/* Arrow indicator */}
+                  <div style={{
+                    position: 'absolute',
+                    top: -5,
+                    left: '50%',
+                    transform: 'translateX(-50%) rotate(45deg)',
+                    width: 10,
+                    height: 10,
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRight: 'none',
+                    borderBottom: 'none',
+                    zIndex: -1,
+                  }} />
+                  {AVATAR_OPTIONS.map(emoji => (
+                    <motion.button
+                      key={emoji}
+                      whileHover={{ scale: 1.15 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => {
+                        setSelectedAvatar(emoji);
+                        setAvatarOpen(false);
+                      }}
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 10,
+                        border: selectedAvatar === emoji
+                          ? '2px solid var(--amber-400)'
+                          : '1px solid transparent',
+                        background: selectedAvatar === emoji
+                          ? 'rgba(251, 191, 36, 0.12)'
+                          : 'rgba(255,255,255,0.03)',
+                        fontSize: 20,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'border-color 0.15s, background 0.15s',
+                      }}
+                    >
+                      {emoji}
+                    </motion.button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Name input */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <input
+              type="text"
+              value={playerName}
+              onChange={e => setPlayerName(e.target.value)}
+              placeholder="Enter your name..."
+              maxLength={16}
+              style={{
+                width: '100%',
+                height: '100%',
+                padding: '14px 16px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 14,
+                color: 'var(--text-primary)',
+                fontSize: 16,
+                fontFamily: "'DM Sans', sans-serif",
+                outline: 'none',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--jade-500)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
+            />
           </div>
         </div>
 
